@@ -1,0 +1,149 @@
+// PS02 Prisma schema. Enums mirror /shared/src/enums.ts exactly.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PASSENGER
+  DRIVER
+  ADMIN
+}
+
+enum DriverStatus {
+  OFFLINE
+  AVAILABLE
+  BUSY
+  REPOSITIONING
+}
+
+enum RideStatus {
+  REQUESTED
+  ACCEPTED
+  ARRIVING
+  ONGOING
+  COMPLETED
+  CANCELLED
+  REASSIGNING
+}
+
+enum SimStrategy {
+  NEAREST
+  SMART
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  createdAt    DateTime @default(now())
+
+  driver Driver?
+  rides  Ride[]   @relation("PassengerRides")
+}
+
+model Driver {
+  id               String       @id @default(cuid())
+  userId           String       @unique
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleType      String       @default("SEDAN")
+  status           DriverStatus @default(OFFLINE)
+  lat              Float        @default(12.9716)
+  lng              Float        @default(77.5946)
+  acceptanceRate   Float        @default(1)
+  completedToday   Int          @default(0)
+  busyMinutesToday Float        @default(0)
+  lastIdleSince    DateTime     @default(now())
+  isSimulated      Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+
+  rides Ride[]
+
+  @@index([status])
+}
+
+model Ride {
+  id              String     @id @default(cuid())
+  passengerId     String
+  passenger       User       @relation("PassengerRides", fields: [passengerId], references: [id])
+  driverId        String?
+  driver          Driver?    @relation(fields: [driverId], references: [id])
+  pickupLat       Float
+  pickupLng       Float
+  dropLat         Float
+  dropLng         Float
+  status          RideStatus @default(REQUESTED)
+  distanceKm      Float
+  etaMin          Float
+  fareEstimate    Float
+  fareFinal       Float?
+  surgeMultiplier Float      @default(1)
+  requestedAt     DateTime   @default(now())
+  acceptedAt      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  promisedEtaMin  Int
+  poolGroupId     String?
+  allocationScores Json?
+  simRunId        String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  events RideEvent[]
+
+  @@index([passengerId])
+  @@index([driverId])
+  @@index([status])
+  @@index([requestedAt])
+}
+
+model RideEvent {
+  id        String   @id @default(cuid())
+  rideId    String
+  ride      Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  payload   Json?
+  createdAt DateTime @default(now())
+
+  @@index([rideId])
+  @@index([createdAt])
+}
+
+model DemandHistory {
+  id        String   @id @default(cuid())
+  zoneId    String
+  hourOfDay Int
+  dayOfWeek Int
+  date      DateTime
+  demand    Int
+
+  @@index([zoneId, hourOfDay])
+  @@index([date])
+}
+
+model DemandForecast {
+  id              String @id @default(cuid())
+  zoneId          String
+  hourOfDay       Int
+  predictedDemand Float
+
+  @@unique([zoneId, hourOfDay])
+}
+
+model SimRun {
+  id        String      @id @default(cuid())
+  seed      Int
+  strategy  SimStrategy
+  metrics   Json
+  createdAt DateTime    @default(now())
+
+  @@index([createdAt])
+}

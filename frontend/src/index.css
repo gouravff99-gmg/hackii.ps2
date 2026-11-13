@@ -1,0 +1,54 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #f6f7f9;
+  color: #141821;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid #3566f6;
+  outline-offset: 2px;
+}
+
+/* Leaflet needs an explicit height on its container. */
+.leaflet-container {
+  height: 100%;
+  width: 100%;
+  z-index: 0;
+  border-radius: 0.875rem;
+  background: #e9edf3;
+  font-family: inherit;
+}
+
+.leaflet-container.leaflet-clickable {
+  cursor: crosshair;
+}
+
+.leaflet-control-attribution {
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.85) !important;
+}
+
+/* Hide scrollbars on horizontal nav strips while keeping scroll. */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
