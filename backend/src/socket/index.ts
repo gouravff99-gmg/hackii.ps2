@@ -1,6 +1,5 @@
 import type http from "node:http";
 import { Server as SocketServer } from "socket.io";
-<<<<<<< HEAD
 import { DriverStatus, Role, ROOMS, SOCKET_EVENTS } from "@ps02/shared";
 import { z } from "zod";
 import { env } from "../config/env";
@@ -23,23 +22,11 @@ const chaosSchema = z.object({
   rideId: z.string().optional(),
 });
 
-/**
- * Socket.IO transport. Every connection is authenticated with the same JWT as
- * REST, joins only its own user room (+ admin room for admins), and handlers
- * validate payloads before touching the domain services.
- */
-=======
-import { SOCKET_EVENTS } from "@ps02/shared";
-import { env } from "../config/env";
-
-/** Attaches Socket.IO to the HTTP server. Event handlers get added per phase. */
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
 export function attachSocket(server: http.Server) {
   const io = new SocketServer(server, {
     cors: { origin: env.webOrigin, credentials: true },
   });
 
-<<<<<<< HEAD
   setRealtimeServer(io);
 
   io.use((socket, next) => {
@@ -142,17 +129,6 @@ export function attachSocket(server: http.Server) {
         });
       }),
     );
-=======
-  io.on("connection", (socket) => {
-    socket.on(SOCKET_EVENTS.ADMIN_CHAOS, () => {
-      socket.emit(SOCKET_EVENTS.NOTIFICATION, {
-        kind: "info",
-        title: "Not available yet",
-        message: "Chaos handlers arrive in Phase 5b.",
-        at: new Date().toISOString(),
-      });
-    });
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
   });
 
   return io;

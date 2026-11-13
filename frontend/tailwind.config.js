@@ -5,7 +5,6 @@ export default {
     extend: {
       colors: {
         brand: {
-<<<<<<< HEAD
           50: "#eef4ff",
           100: "#dbe7ff",
           200: "#bcd3ff",
@@ -72,19 +71,6 @@ export default {
         "slide-up": "slideUp 0.25s ease-out",
         "slide-in": "slideIn 0.25s ease-out",
         "pulse-soft": "pulseSoft 1.6s ease-in-out infinite",
-=======
-          50: "#eef7ff",
-          100: "#d9edff",
-          200: "#bbe0ff",
-          300: "#8ccbff",
-          400: "#56acff",
-          500: "#2f8bff",
-          600: "#186bf5",
-          700: "#1455e1",
-          800: "#1746b6",
-          900: "#193e8f",
-        },
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
       },
     },
   },

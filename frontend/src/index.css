@@ -10,9 +10,9 @@ body,
 
 body {
   margin: 0;
-<<<<<<< HEAD
   background-color: #f6f7f9;
   color: #141821;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -24,17 +24,12 @@ body {
 :focus-visible {
   outline: 2px solid #3566f6;
   outline-offset: 2px;
-=======
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
 }
 
-/* Leaflet needs an explicit height on its container. */
 .leaflet-container {
   height: 100%;
   width: 100%;
   z-index: 0;
-<<<<<<< HEAD
   border-radius: 0.875rem;
   background: #e9edf3;
   font-family: inherit;
@@ -49,14 +44,11 @@ body {
   background: rgba(255, 255, 255, 0.85) !important;
 }
 
-/* Hide scrollbars on horizontal nav strips while keeping scroll. */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-=======
-  border-radius: 0.75rem;
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
 }

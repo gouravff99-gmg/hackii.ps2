@@ -8,16 +8,10 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "types": ["vite/client"],
-<<<<<<< HEAD
-    "paths": {
-      "@ps02/shared": ["../shared/src/index.ts"],
-      "@/*": ["./src/*"]
-=======
     "baseUrl": ".",
     "paths": {
       "@ps02/shared": ["../shared/src/index.ts"],
       "@/*": ["src/*"]
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
     }
   },
   "include": ["src", "vite.config.ts", "../shared/src"]

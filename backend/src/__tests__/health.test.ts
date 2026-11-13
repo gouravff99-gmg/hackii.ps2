@@ -25,7 +25,6 @@ describe("GET /api/health", () => {
     expect(body.service).toBe("ps02-backend");
   });
 
-<<<<<<< HEAD
   it("returns a structured JSON 404 for unknown routes", async () => {
     const res = await fetch(`${base}/api/nope`);
     expect(res.status).toBe(404);
@@ -34,11 +33,5 @@ describe("GET /api/health", () => {
     };
     expect(body.error.code).toBe("not_found");
     expect(body.error.message).toContain("/api/nope");
-=======
-  it("returns JSON 404 for unknown routes", async () => {
-    const res = await fetch(`${base}/api/nope`);
-    expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ error: "Not found" });
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
   });
 });

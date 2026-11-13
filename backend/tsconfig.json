@@ -11,10 +11,7 @@
     "resolveJsonModule": true,
     "noEmit": true,
     "types": ["node"],
-<<<<<<< HEAD
-=======
     "baseUrl": ".",
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
     "paths": {
       "@ps02/shared": ["../shared/src/index.ts"],
       "@ps02/shared/*": ["../shared/src/*"]

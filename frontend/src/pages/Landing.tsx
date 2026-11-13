@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-<<<<<<< HEAD
 import { CITY, FARE, POOL, SIM } from "@ps02/shared";
 import { MapCanvas } from "../components/map/MapCanvas";
+import HealthBadge from "../components/HealthBadge";
 import { Icon, type IconName } from "../components/ui/Icon";
 import { useAuth } from "../hooks/useAuth";
 import { homeForRole } from "../utils/roles";
@@ -37,10 +37,13 @@ export function Landing() {
       <section className="relative overflow-hidden border-b border-ink-100 bg-gradient-to-b from-white to-ink-50">
         <div className="mx-auto grid w-full max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
           <div className="animate-slide-up">
-            <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1 text-xs font-medium text-ink-600">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {CITY.name} pilot · 20 km × 20 km service area
-            </span>
+            <div className="mb-5 flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full border border-ink-200 bg-white px-3 py-1 text-xs font-medium text-ink-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {CITY.name} pilot · 20 km × 20 km service area
+              </span>
+              <HealthBadge />
+            </div>
 
             <h1 className="mt-5 text-4xl font-semibold leading-tight tracking-tight text-ink-900 sm:text-5xl">
               Rides that arrive
@@ -104,12 +107,20 @@ export function Landing() {
                 zoom={12}
                 showControls={false}
                 markers={[
-                  { id: "center", lat: CITY.center.lat, lng: CITY.center.lng, kind: "active", label: CITY.name },
+                  {
+                    id: "center",
+                    lat: CITY.center.lat,
+                    lng: CITY.center.lng,
+                    kind: "active",
+                    label: CITY.name,
+                  },
                 ]}
               />
             </div>
             <div className="absolute -bottom-4 left-4 right-4 rounded-xl border border-ink-200 bg-white/95 px-4 py-3 shadow-card backdrop-blur sm:left-6 sm:right-auto sm:max-w-xs">
-              <p className="text-xs font-medium uppercase tracking-wide text-ink-400">Live zone signal</p>
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-400">
+                Live zone signal
+              </p>
               <p className="mt-1 text-sm text-ink-700">
                 Surge is computed per 1 km zone from observed demand and available supply.
               </p>
@@ -156,71 +167,10 @@ export function Landing() {
               </div>
             ))}
           </div>
-=======
-import { CircleMarker, MapContainer, TileLayer, Tooltip } from "react-leaflet";
-import { CITY, FARE, NUM_DRIVERS } from "@ps02/shared";
-import HealthBadge from "../components/HealthBadge";
-
-const ROLES = [
-  { to: "/passenger", title: "Passenger", body: "Request a ride, watch it live." },
-  { to: "/driver", title: "Driver", body: "Go online, accept offers." },
-  { to: "/admin", title: "Admin", body: "Zones, simulator, evaluation." },
-];
-
-export default function Landing() {
-  return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">PS02 Ride Hailing</h1>
-          <p className="text-sm text-slate-500">
-            Intelligent ride matching and dynamic driver allocation
-          </p>
-        </div>
-        <HealthBadge />
-      </header>
-
-      <section className="grid gap-4 md:grid-cols-3">
-        {ROLES.map((c) => (
-          <Link
-            key={c.to}
-            to={c.to}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-brand-400 hover:shadow"
-          >
-            <h2 className="font-semibold text-slate-900">{c.title}</h2>
-            <p className="mt-1 text-sm text-slate-500">{c.body}</p>
-          </Link>
-        ))}
-      </section>
-
-      <section className="h-[420px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <MapContainer center={[CITY.center.lat, CITY.center.lng]} zoom={12} scrollWheelZoom>
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          <CircleMarker
-            center={[CITY.center.lat, CITY.center.lng]}
-            radius={10}
-            pathOptions={{ color: "#186bf5", fillColor: "#186bf5", fillOpacity: 0.5 }}
-          >
-            <Tooltip permanent direction="top">
-              {CITY.name} centre
-            </Tooltip>
-          </CircleMarker>
-        </MapContainer>
-      </section>
-
-      <section className="grid gap-3 text-sm text-slate-600 md:grid-cols-3">
-        <div className="rounded-lg bg-white p-3 shadow-sm">
-          Base fare ₹{FARE.base} · ₹{FARE.perKm}/km · ₹{FARE.perMin}/min
-        </div>
-        <div className="rounded-lg bg-white p-3 shadow-sm">Simulator fleet: {NUM_DRIVERS} drivers</div>
-        <div className="rounded-lg bg-white p-3 shadow-sm">
-          Zones derived from a 20 km × 20 km box at 1 km cells
->>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
         </div>
       </section>
     </div>
   );
 }
+
+export default Landing;
