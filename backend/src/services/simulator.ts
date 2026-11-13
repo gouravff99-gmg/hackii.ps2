@@ -7,6 +7,7 @@ import { getRoute } from "./osrm";
 import { getActiveOffer, respondToOffer } from "./dispatch";
 import { advanceRide, createRide } from "./rides";
 import { broadcast, emitToAdmins } from "./realtime";
+import { publishDriverLocation } from "./driverTracking";
 import { getRuntimeSpeedFactor, setRuntimeSpeedFactor } from "../lib/runtime";
 
 export { mulberry32 };
@@ -201,6 +202,7 @@ async function tick() {
       status: "SIMULATED",
       at: new Date().toISOString(),
     });
+    await publishDriverLocation(driver.driverId, { lat: driver.lat, lng: driver.lng });
 
     if (arrived) {
       driver.path = null;

@@ -24,6 +24,8 @@ import { Spinner } from "../../components/ui/Spinner";
 import { EmptyState, ErrorState } from "../../components/ui/EmptyState";
 import { StatCard } from "../../components/ui/StatCard";
 import { Icon } from "../../components/ui/Icon";
+import { MobilityControlTower } from "./MobilityControlTower";
+import { KarnatakaDemoHeatmap } from "./KarnatakaDemoHeatmap";
 
 type HeatMode = "predicted" | "actual" | "difference";
 
@@ -214,6 +216,9 @@ export function DemandIntelligence() {
           </div>
         }
       />
+
+      <MobilityControlTower />
+      <KarnatakaDemoHeatmap />
 
       {loading ? (
         <div className="flex min-h-[40vh] items-center justify-center text-ink-400">

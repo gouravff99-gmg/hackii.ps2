@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   RideStatus,
   SOCKET_EVENTS,
+  type NotificationPayload,
   type Ride,
   type RideDetailView,
   type RideStatusPayload,
@@ -21,6 +22,7 @@ import { EmptyState, ErrorState } from "../../components/ui/EmptyState";
 import { MapCanvas, type MapMarker } from "../../components/map/MapCanvas";
 import { RideCard } from "../../components/rides/RideCard";
 import { RideStatusStepper } from "../../components/rides/RideStatusStepper";
+import { LiveRideTracking } from "../../components/rides/LiveRideTracking";
 import {
   formatCurrency,
   formatDateTime,
@@ -34,6 +36,7 @@ const CANCELLABLE: RideStatus[] = [
   RideStatus.REQUESTED,
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.REASSIGNING,
 ];
 
@@ -41,6 +44,7 @@ const ACTIVE: RideStatus[] = [
   RideStatus.REQUESTED,
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.ONGOING,
   RideStatus.REASSIGNING,
 ];
@@ -56,6 +60,7 @@ export function MyRides() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [assignmentEvent, setAssignmentEvent] = useState<{ rideId: string; driverId: string } | null>(null);
 
   const rides = history.data?.rides ?? [];
   const isDemoRide = detail?.events.some((event) => event.type === "DEMO_MODE") ?? false;
@@ -99,13 +104,29 @@ export function MyRides() {
     if (selectedId) {
       rideApi
         .get(selectedId)
-        .then((response) => setDetail(response.ride))
-        .catch(() => undefined);
+        .then((response) => {
+          setDetail(response.ride);
+          setDetailError(null);
+        })
+        .catch((err) => setDetailError(errorMessage(err)));
     }
   };
 
   useSocketEvent<RideStatusPayload>(SOCKET_EVENTS.RIDE_STATUS, (payload) => {
-    if (!selectedId || payload.rideId === selectedId) refresh();
+    if (payload.status === RideStatus.ACCEPTED && payload.driverId) {
+      setAssignmentEvent({ rideId: payload.rideId, driverId: payload.driverId });
+    }
+    if (!selectedId || payload.rideId === selectedId) {
+      refresh();
+    }
+  });
+  useSocketEvent<NotificationPayload>(SOCKET_EVENTS.NOTIFICATION, (payload) => {
+    if (!payload.rideId || payload.rideId === selectedId) {
+      toast.push(payload.kind, payload.title, payload.message, {
+        durationMs: 3500,
+        eventKey: `ride-notice:${payload.rideId ?? "general"}:${payload.title}:${payload.message}`,
+      });
+    }
   });
 
   const cancelRide = async () => {
@@ -142,6 +163,41 @@ export function MyRides() {
     }
     return list;
   }, [detail, isDemoRide]);
+
+  if (
+    detail &&
+    detail.driver &&
+    [
+      RideStatus.ACCEPTED,
+      RideStatus.ARRIVING,
+      RideStatus.ARRIVED,
+      RideStatus.ONGOING,
+      RideStatus.COMPLETED,
+    ].includes(detail.status)
+  ) {
+    return (
+      <div className="flex flex-col gap-4">
+        <PageHeader
+          title={detail.status === RideStatus.COMPLETED ? "Your completed ride" : "Your ride"}
+          description="Live ride status, driver location and trip details."
+          actions={
+            <Link to="/passenger" className="text-sm font-medium text-brand-700">
+              Passenger home
+            </Link>
+          }
+        />
+        <LiveRideTracking
+          key={detail.id}
+          ride={detail}
+          onRefresh={refresh}
+          onCancel={() => void cancelRide()}
+          cancelling={cancelling}
+          demoMode={isDemoRide}
+          assignmentEventDriverId={assignmentEvent?.rideId === detail.id ? assignmentEvent.driverId : null}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-5">

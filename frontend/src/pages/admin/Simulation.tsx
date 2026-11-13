@@ -85,7 +85,7 @@ export function Simulation() {
   const activeRides = useMemo(
     () =>
       rides.filter((ride) =>
-        [RideStatus.REQUESTED, RideStatus.ACCEPTED, RideStatus.ARRIVING, RideStatus.ONGOING].includes(
+        [RideStatus.REQUESTED, RideStatus.ACCEPTED, RideStatus.ARRIVING, RideStatus.ARRIVED, RideStatus.ONGOING].includes(
           ride.status,
         ),
       ),

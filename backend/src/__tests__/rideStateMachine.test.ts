@@ -12,6 +12,8 @@ describe("canTransition", () => {
   it("allows the documented forward path", () => {
     expect(canTransition(RideStatus.REQUESTED, RideStatus.ACCEPTED)).toBe(true);
     expect(canTransition(RideStatus.ACCEPTED, RideStatus.ARRIVING)).toBe(true);
+    expect(canTransition(RideStatus.ARRIVING, RideStatus.ARRIVED)).toBe(true);
+    expect(canTransition(RideStatus.ARRIVED, RideStatus.ONGOING)).toBe(true);
     expect(canTransition(RideStatus.ARRIVING, RideStatus.ONGOING)).toBe(true);
     expect(canTransition(RideStatus.ONGOING, RideStatus.COMPLETED)).toBe(true);
   });
@@ -20,6 +22,8 @@ describe("canTransition", () => {
     expect(canTransition(RideStatus.REQUESTED, RideStatus.REASSIGNING)).toBe(true);
     expect(canTransition(RideStatus.ACCEPTED, RideStatus.REASSIGNING)).toBe(true);
     expect(canTransition(RideStatus.ARRIVING, RideStatus.REASSIGNING)).toBe(true);
+    expect(canTransition(RideStatus.ARRIVED, RideStatus.REASSIGNING)).toBe(true);
+    expect(canTransition(RideStatus.ARRIVED, RideStatus.CANCELLED)).toBe(true);
     expect(canTransition(RideStatus.REASSIGNING, RideStatus.ACCEPTED)).toBe(true);
     expect(canTransition(RideStatus.REASSIGNING, RideStatus.REQUESTED)).toBe(true);
     expect(canTransition(RideStatus.REQUESTED, RideStatus.CANCELLED)).toBe(true);
@@ -66,6 +70,7 @@ describe("isTerminal", () => {
     expect(isTerminal(RideStatus.REQUESTED)).toBe(false);
     expect(isTerminal(RideStatus.ACCEPTED)).toBe(false);
     expect(isTerminal(RideStatus.ARRIVING)).toBe(false);
+    expect(isTerminal(RideStatus.ARRIVED)).toBe(false);
     expect(isTerminal(RideStatus.ONGOING)).toBe(false);
     expect(isTerminal(RideStatus.REASSIGNING)).toBe(false);
   });

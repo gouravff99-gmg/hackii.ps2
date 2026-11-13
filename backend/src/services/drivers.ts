@@ -1,9 +1,10 @@
 import { DriverStatus, type NearbyDriver } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
-import { haversineKm, pointInIndiaBounds } from "./geo";
+import { haversineKm, pointInBounds, pointInIndiaBounds, zoneIdFor } from "./geo";
 import { pickupEtaMinutes } from "./allocation";
 import { eligibleDriverWhere, isDriverEligible } from "./driverEligibility";
+import { emitZonesUpdate } from "./realtime";
 
 /** Available drivers within `radiusKm` of a point, nearest first. */
 export async function findNearbyDrivers(
@@ -61,23 +62,48 @@ export async function setDriverStatus(driverId: string, status: DriverStatus) {
     throw ApiError.conflict(`Driver cannot go from ${driver.status} to ${status}`);
   }
 
-  return prisma.driver.update({
+  const updated = await prisma.driver.update({
     where: { id: driverId },
     data: {
       status,
       lastIdleSince: status === DriverStatus.AVAILABLE ? new Date() : driver.lastIdleSince,
     },
   });
+  emitZonesUpdate();
+  return updated;
 }
 
 export async function updateDriverLocation(driverId: string, lat: number, lng: number) {
   if (!pointInIndiaBounds(lat, lng)) {
     throw ApiError.badRequest("Driver location must be within India");
   }
-  return prisma.driver.update({
+  const previous = await prisma.driver.findUnique({
     where: { id: driverId },
-    data: { lat, lng },
+    select: { lat: true, lng: true, status: true },
   });
+  if (!previous) throw ApiError.notFound("Driver profile not found");
+  const driver = await prisma.driver.update({
+    where: { id: driverId },
+    data: { lat, lng, locationUpdatedAt: new Date() },
+  });
+  const distanceDelta = haversineKm({ lat: previous.lat, lng: previous.lng }, { lat, lng });
+  if (distanceDelta > 0) {
+    await prisma.ride.updateMany({
+      where: { driverId, status: "ONGOING" },
+      data: { actualDistanceKm: { increment: distanceDelta } },
+    });
+  }
+  const previousZone = pointInBounds(previous.lat, previous.lng)
+    ? zoneIdFor(previous.lat, previous.lng)
+    : null;
+  const currentZone = pointInBounds(lat, lng) ? zoneIdFor(lat, lng) : null;
+  if (
+    previousZone !== currentZone &&
+    (driver.status === DriverStatus.AVAILABLE || driver.status === DriverStatus.BUSY)
+  ) {
+    emitZonesUpdate();
+  }
+  return driver;
 }
 
 export async function getDriverProfile(driverId: string) {
@@ -87,4 +113,12 @@ export async function getDriverProfile(driverId: string) {
   });
   if (!driver) throw ApiError.notFound("Driver profile not found");
   return driver;
+}
+
+export async function updateVehicleRegistration(driverId: string, registration: string | null) {
+  return prisma.driver.update({
+    where: { id: driverId },
+    data: { vehicleRegistration: registration },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
 }

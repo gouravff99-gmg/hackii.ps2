@@ -4,6 +4,7 @@ import type { ChaosRequest, NearbyDriver, SimStatus } from "./types";
 export const SOCKET_EVENTS = {
   /* server -> client */
   DRIVER_LOCATION: "driver:location",
+  RIDE_DRIVER_LOCATION: "ride:driverLocation",
   DRIVERS_SNAPSHOT: "drivers:snapshot",
   RIDE_STATUS: "ride:status",
   RIDE_OFFER: "ride:offer",
@@ -37,6 +38,10 @@ export interface DriverLocationPayload {
   lng: number;
   status?: string;
   at: string;
+}
+
+export interface RideDriverLocationPayload extends DriverLocationPayload {
+  rideId: string;
 }
 
 export interface DriversSnapshotPayload {
@@ -83,6 +88,10 @@ export interface NotificationPayload {
 }
 
 export interface SimTickPayload extends SimStatus {
+  at: string;
+}
+
+export interface ZonesUpdatePayload {
   at: string;
 }
 

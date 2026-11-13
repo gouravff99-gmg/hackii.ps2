@@ -25,6 +25,9 @@ export const driverApi = {
   updateLocation(lat: number, lng: number) {
     return api.post<{ driver: DriverAdminView }>("/drivers/location", { lat, lng });
   },
+  updateVehicleRegistration(registration: string) {
+    return api.put<{ driver: DriverAdminView }>("/drivers/vehicle-registration", { registration });
+  },
   onboarding() {
     return api.get<{ application: DriverOnboardingApplication }>("/drivers/onboarding");
   },

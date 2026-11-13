@@ -6,10 +6,12 @@ import {
   type RideStatusPayload,
 } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
+import { emitZonesUpdate } from "./realtime";
 import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
 import { computeFare } from "./fare";
 import { getRoute } from "./osrm";
+import { pointInIndiaBounds } from "./geo";
 import { validateRidePoints } from "./bookingValidation";
 import { surgeForPickup } from "./zones";
 import { appendRideEvent, transitionRide } from "./rideStateMachine";
@@ -20,8 +22,16 @@ const ACTIVE_STATUSES: RideStatus[] = [
   RideStatus.REQUESTED,
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.ONGOING,
   RideStatus.REASSIGNING,
+];
+
+const TRACKING_STATUSES: RideStatus[] = [
+  RideStatus.ACCEPTED,
+  RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
+  RideStatus.ONGOING,
 ];
 
 export interface RidePlaceInput {
@@ -86,6 +96,7 @@ export async function createRide(
       simRunId: options.simRunId,
     },
   });
+  emitZonesUpdate();
 
   await appendRideEvent(ride.id, "REQUESTED", "Ride requested", {
     pickup: input.pickup,
@@ -144,8 +155,63 @@ export async function getRideForViewer(rideId: string, viewer: Viewer): Promise<
   if (!isAdmin && !isPassenger && !isDriver) {
     throw ApiError.forbidden("You do not have access to this ride");
   }
-
   return ride;
+}
+
+export async function getTrackingRoute(rideId: string, viewer: Viewer, origin: LatLng) {
+  if (!pointInIndiaBounds(origin.lat, origin.lng)) {
+    throw ApiError.badRequest("Driver location must be within India");
+  }
+  const ride = await getRideForViewer(rideId, viewer);
+  if (!TRACKING_STATUSES.includes(ride.status)) {
+    throw ApiError.conflict("Live routing is only available for an assigned active ride");
+  }
+
+  const destination =
+    ride.status === RideStatus.ONGOING
+      ? { lat: ride.dropLat, lng: ride.dropLng }
+      : { lat: ride.pickupLat, lng: ride.pickupLng };
+  return getRoute(origin, destination);
+}
+
+export async function submitRideRating(
+  rideId: string,
+  passengerId: string,
+  rating: number,
+  feedback?: string,
+) {
+  const ride = await prisma.ride.findUnique({ where: { id: rideId } });
+  if (!ride) throw ApiError.notFound("Ride not found");
+  if (ride.passengerId !== passengerId) {
+    throw ApiError.forbidden("You can only rate your own rides");
+  }
+  if (ride.status !== RideStatus.COMPLETED) {
+    throw ApiError.conflict("A ride can only be rated after it is completed");
+  }
+  if (ride.passengerRating !== null) {
+    throw ApiError.conflict("This ride has already been rated");
+  }
+  const result = await prisma.ride.updateMany({
+    where: { id: rideId, passengerId, status: RideStatus.COMPLETED, passengerRating: null },
+    data: { passengerRating: rating, passengerFeedback: feedback?.trim() || null },
+  });
+  if (result.count !== 1) {
+    const current = await prisma.ride.findUnique({ where: { id: rideId } });
+    if (!current) throw ApiError.notFound("Ride not found");
+    if (current.passengerId !== passengerId) {
+      throw ApiError.forbidden("You can only rate your own rides");
+    }
+    if (current.status !== RideStatus.COMPLETED) {
+      throw ApiError.conflict("A ride can only be rated after it is completed");
+    }
+    throw ApiError.conflict("This ride has already been rated");
+  }
+  const updated = await prisma.ride.findUniqueOrThrow({ where: { id: rideId } });
+  await appendRideEvent(rideId, "PASSENGER_RATING", "Passenger submitted a ride rating", {
+    rating,
+    hasFeedback: Boolean(feedback?.trim()),
+  });
+  return updated;
 }
 
 export async function listPassengerRides(passengerId: string, limit = 25) {
@@ -170,7 +236,9 @@ export async function getDriverActiveRide(driverId: string) {
   return prisma.ride.findFirst({
     where: {
       driverId,
-      status: { in: [RideStatus.ACCEPTED, RideStatus.ARRIVING, RideStatus.ONGOING] },
+      status: {
+        in: [RideStatus.ACCEPTED, RideStatus.ARRIVING, RideStatus.ARRIVED, RideStatus.ONGOING],
+      },
     },
     orderBy: { requestedAt: "desc" },
     include: {
@@ -226,7 +294,7 @@ export async function cancelRide(rideId: string, viewer: Viewer): Promise<RideDe
 
 /**
  * Driver progression through the live stages.
- * ACCEPTED -> ARRIVING -> ONGOING -> COMPLETED.
+ * ACCEPTED -> ARRIVING -> ARRIVED -> ONGOING -> COMPLETED.
  */
 export async function advanceRide(
   rideId: string,
@@ -249,6 +317,18 @@ export async function advanceRide(
     return loadRideDetail(rideId);
   }
 
+  if (next === RideStatus.ARRIVED) {
+    await transitionRide({
+      rideId,
+      to: RideStatus.ARRIVED,
+      message: "Driver arrived at the pickup point",
+      eventType: "ARRIVED",
+      payload: { driverId },
+    });
+    notifyUser(ride.passengerId, "success", "Driver has arrived", "Your driver is waiting at pickup.", rideId);
+    return loadRideDetail(rideId);
+  }
+
   if (next === RideStatus.ONGOING) {
     await transitionRide({
       rideId,
@@ -265,7 +345,11 @@ export async function advanceRide(
   if (next === RideStatus.COMPLETED) {
     const startedAt = ride.startedAt ?? ride.acceptedAt ?? ride.requestedAt;
     const durationMin = Math.max(1, (Date.now() - startedAt.getTime()) / 60_000);
-    const fareFinal = computeFare(ride.distanceKm, durationMin, ride.surgeMultiplier);
+    const fareFinal = computeFare(
+      ride.actualDistanceKm > 0 ? ride.actualDistanceKm : ride.distanceKm,
+      durationMin,
+      ride.surgeMultiplier,
+    );
 
     await transitionRide({
       rideId,

@@ -31,6 +31,7 @@ const ACTIVE_STATUSES: RideStatus[] = [
   RideStatus.REQUESTED,
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.ONGOING,
   RideStatus.REASSIGNING,
 ];
@@ -57,7 +58,10 @@ export function PassengerHome() {
   });
 
   useSocketEvent<NotificationPayload>(SOCKET_EVENTS.NOTIFICATION, (payload) => {
-    toast.push(payload.kind, payload.title, payload.message);
+    toast.push(payload.kind, payload.title, payload.message, {
+      durationMs: 3500,
+      eventKey: `ride-notice:${payload.rideId ?? "general"}:${payload.title}:${payload.message}`,
+    });
   });
 
   const activeRide = useMemo(

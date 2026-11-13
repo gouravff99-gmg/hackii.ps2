@@ -20,7 +20,8 @@ export interface OverviewMetrics {
   offlineDrivers: number;
   activeRides: number;
   completedRidesToday: number;
-  averagePassengerWaitSec: number;
+  acceptedRidesToday: number;
+  averagePassengerWaitSec: number | null;
   driverUtilization: number;
   totalPassengers: number;
 }
@@ -42,6 +43,7 @@ export async function getOverview(): Promise<OverviewMetrics> {
               PrismaRideStatus.REQUESTED,
               PrismaRideStatus.ACCEPTED,
               PrismaRideStatus.ARRIVING,
+              PrismaRideStatus.ARRIVED,
               PrismaRideStatus.ONGOING,
               PrismaRideStatus.REASSIGNING,
             ],
@@ -65,7 +67,7 @@ export async function getOverview(): Promise<OverviewMetrics> {
     .filter((seconds) => seconds >= 0);
 
   const averagePassengerWaitSec =
-    waits.length > 0 ? round2(waits.reduce((sum, value) => sum + value, 0) / waits.length) : 0;
+    waits.length > 0 ? round2(waits.reduce((sum, value) => sum + value, 0) / waits.length) : null;
 
   const minutesSinceMidnight = Math.max(1, (Date.now() - startOfDay.getTime()) / 60_000);
   const capacity = Math.max(1, totalDrivers) * minutesSinceMidnight;
@@ -78,6 +80,7 @@ export async function getOverview(): Promise<OverviewMetrics> {
     offlineDrivers,
     activeRides,
     completedRidesToday,
+    acceptedRidesToday: waits.length,
     averagePassengerWaitSec,
     driverUtilization,
     totalPassengers,

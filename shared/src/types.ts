@@ -50,6 +50,7 @@ export interface Driver {
   status: DriverStatus;
   lat: number;
   lng: number;
+  locationUpdatedAt?: string;
   acceptanceRate: number;
   completedToday: number;
   busyMinutesToday: number;
@@ -105,6 +106,9 @@ export interface Ride {
   etaMin: number;
   fareEstimate: number;
   fareFinal?: number | null;
+  actualDistanceKm?: number;
+  passengerRating?: number | null;
+  passengerFeedback?: string | null;
   surgeMultiplier: number;
   requestedAt: string;
   acceptedAt?: string | null;
@@ -211,6 +215,27 @@ export interface ZoneSnapshot {
   ratio: number;
   surge: number;
   predictedDemand?: number;
+}
+
+export type ZoneAvailability = "GOOD" | "MODERATE" | "LIMITED" | "HIGH_PRESSURE" | "INSUFFICIENT_DATA";
+export type IntelligenceConfidence = "LOW" | "MEDIUM" | "HIGH";
+export type IntelligenceDataSource = "LIVE" | "SIMULATION" | "DEMO" | "FORECAST";
+
+/** Aggregated zone data shared by passenger, driver, and admin experiences. */
+export interface MobilityZoneInsight extends ZoneSnapshot {
+  currentRequests15m: number;
+  requestedDropoffs15m: number;
+  measuredRequests15m: number;
+  simulatedRequests15m: number;
+  pendingRequests: number;
+  averageAssignmentWaitSeconds: number | null;
+  assignmentSamples7d: number;
+  availableDrivers: number;
+  busyDrivers: number;
+  demandSupplyGap: number;
+  availability: ZoneAvailability;
+  confidence: IntelligenceConfidence;
+  dataSources: IntelligenceDataSource[];
 }
 
 export interface Recommendation {

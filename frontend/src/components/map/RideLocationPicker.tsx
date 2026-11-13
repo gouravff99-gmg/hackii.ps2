@@ -1,7 +1,5 @@
-import { useMemo } from "react";
 import type { ReactNode } from "react";
 import {
-  INDIA_CENTER,
   type LatLng,
   type NearbyDriver,
   type RouteResult,
@@ -10,10 +8,9 @@ import { Button } from "../ui/Button";
 import { Card, CardBody, CardHeader } from "../ui/Card";
 import { Icon } from "../ui/Icon";
 import { Input } from "../ui/Input";
-import { MapCanvas, type MapMarker } from "./MapCanvas";
 import { PlaceSearch } from "./PlaceSearch";
+import { PassengerPickupMap } from "./PassengerPickupMap";
 import type { useRideLocations } from "../../hooks/useRideLocations";
-import { formatMinutes } from "../../utils/format";
 
 interface RideLocationPickerProps {
   locations: ReturnType<typeof useRideLocations>;
@@ -30,72 +27,9 @@ export function RideLocationPicker({
   onReset,
   bookingPanel,
 }: RideLocationPickerProps) {
-  const markers: MapMarker[] = useMemo(() => {
-    const list: MapMarker[] = nearby.map((driver) => ({
-      id: driver.id,
-      lat: driver.lat,
-      lng: driver.lng,
-      kind: "driver",
-      label: `${driver.name} · ${formatMinutes(driver.etaMin)}`,
-    }));
-    if (locations.pickup) {
-      list.push({
-        id: "pickup",
-        lat: locations.pickup.lat,
-        lng: locations.pickup.lng,
-        kind: "pickup",
-        label: locations.pickupAddress || "Pickup",
-      });
-    }
-    if (locations.drop) {
-      list.push({
-        id: "drop",
-        lat: locations.drop.lat,
-        lng: locations.drop.lng,
-        kind: "drop",
-        label: locations.dropAddress || "Destination",
-      });
-    }
-    return list;
-  }, [nearby, locations.pickup, locations.drop, locations.pickupAddress, locations.dropAddress]);
-
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <Card className="overflow-hidden">
-        <CardHeader
-          title={`Tap the map to set ${locations.activeField === "pickup" ? "pickup" : "destination"}`}
-          subtitle="India-wide map · choose pickup or destination"
-          action={
-            <div className="flex gap-1 rounded-lg bg-ink-100 p-1">
-              {(["pickup", "drop"] as const).map((field) => (
-                <button
-                  key={field}
-                  type="button"
-                  onClick={() => locations.setActiveField(field)}
-                  aria-pressed={locations.activeField === field}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    locations.activeField === field
-                      ? "bg-white text-ink-900 shadow-sm"
-                      : "text-ink-500"
-                  }`}
-                >
-                  {field === "pickup" ? "Pickup" : "Destination"}
-                </button>
-              ))}
-            </div>
-          }
-        />
-        <div className="h-[380px] sm:h-[480px]">
-          <MapCanvas
-            center={locations.pickup ?? INDIA_CENTER}
-            zoom={locations.pickup ? 13 : 4}
-            markers={markers}
-            route={route}
-            onMapClick={locations.handleMapClick}
-            recenter={locations.mapRecenter}
-          />
-        </div>
-      </Card>
+      <PassengerPickupMap locations={locations} nearby={nearby} route={route} />
 
       <Card>
         <CardHeader title="Trip locations" subtitle="Search an address or select a point on the map" />

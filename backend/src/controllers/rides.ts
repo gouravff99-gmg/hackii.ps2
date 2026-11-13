@@ -18,12 +18,19 @@ export const placeSchema = z.object({
   drop: pointSchema,
 });
 
+export const locationSchema = pointSchema;
+
 export const respondSchema = z.object({
   accept: z.boolean(),
 });
 
 export const advanceSchema = z.object({
-  status: z.enum([RideStatus.ARRIVING, RideStatus.ONGOING, RideStatus.COMPLETED]),
+  status: z.enum([RideStatus.ARRIVING, RideStatus.ARRIVED, RideStatus.ONGOING, RideStatus.COMPLETED]),
+});
+
+export const ratingSchema = z.object({
+  rating: z.number().int().min(1).max(5),
+  feedback: z.string().trim().max(1000).optional(),
 });
 
 export const idParamSchema = z.object({ rideId: z.string().min(1).max(64) });
@@ -43,6 +50,20 @@ export async function create(req: Request, res: Response) {
 export async function getById(req: Request, res: Response) {
   const { rideId } = req.validated.params as z.infer<typeof idParamSchema>;
   res.json({ ride: await ridesService.getRideForViewer(rideId, viewerFrom(req)) });
+}
+
+export async function trackingRoute(req: Request, res: Response) {
+  const { rideId } = req.validated.params as z.infer<typeof idParamSchema>;
+  const { lat, lng } = req.validated.body as { lat: number; lng: number };
+  res.json(await ridesService.getTrackingRoute(rideId, viewerFrom(req), { lat, lng }));
+}
+
+export async function rate(req: Request, res: Response) {
+  const auth = currentAuth(req);
+  const { rideId } = req.validated.params as z.infer<typeof idParamSchema>;
+  const { rating, feedback } = req.validated.body as z.infer<typeof ratingSchema>;
+  const ride = await ridesService.submitRideRating(rideId, auth.sub, rating, feedback);
+  res.json({ ride });
 }
 
 export async function history(req: Request, res: Response) {

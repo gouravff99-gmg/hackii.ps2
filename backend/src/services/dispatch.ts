@@ -330,7 +330,14 @@ async function releaseDriver(driverId: string) {
   const otherActive = await prisma.ride.count({
     where: {
       driverId,
-      status: { in: [RideStatus.ACCEPTED, RideStatus.ARRIVING, RideStatus.ONGOING] },
+      status: {
+        in: [
+          RideStatus.ACCEPTED,
+          RideStatus.ARRIVING,
+          RideStatus.ARRIVED,
+          RideStatus.ONGOING,
+        ],
+      },
     },
   });
   if (otherActive > 0) return;
@@ -472,6 +479,7 @@ export async function driverCancelRide(rideId: string, driverId: string): Promis
   if (
     ride.status !== RideStatus.ACCEPTED &&
     ride.status !== RideStatus.ARRIVING &&
+    ride.status !== RideStatus.ARRIVED &&
     ride.status !== RideStatus.ONGOING
   ) {
     throw ApiError.conflict("This ride can no longer be cancelled by the driver");
@@ -510,7 +518,11 @@ export async function checkDelayAndReassign(
 ): Promise<boolean> {
   const ride = await prisma.ride.findUnique({ where: { id: rideId } });
   if (!ride || !ride.driverId) return false;
-  if (ride.status !== RideStatus.ACCEPTED && ride.status !== RideStatus.ARRIVING) return false;
+  if (
+    ride.status !== RideStatus.ACCEPTED &&
+    ride.status !== RideStatus.ARRIVING &&
+    ride.status !== RideStatus.ARRIVED
+  ) return false;
 
   const promised = Math.max(1, ride.promisedEtaMin);
   const overrun = (actualEtaMin - promised) / promised;

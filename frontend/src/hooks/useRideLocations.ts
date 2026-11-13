@@ -153,6 +153,22 @@ export function useRideLocations() {
     }
   };
 
+  const setLocationPoint = (field: LocationField, point: LatLng) => {
+    const coordinates = `${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`;
+    if (field === "pickup") {
+      setPickup(point);
+      setPickupText(coordinates);
+      resolveAddress("pickup", point);
+      setMapRecenter(point);
+      setActiveField("drop");
+      return;
+    }
+    setDrop(point);
+    setDropText(coordinates);
+    resolveAddress("drop", point);
+    setMapRecenter(point);
+  };
+
   const clearLocation = (field: LocationField) => {
     const timer = reverseTimers.current[field];
     if (timer) clearTimeout(timer);
@@ -211,6 +227,7 @@ export function useRideLocations() {
     selectPlace,
     useCurrentLocation,
     setCoordinateText,
+    setLocationPoint,
     clearLocation,
     resolveAddress,
     centerPickup,

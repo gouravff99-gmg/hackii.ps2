@@ -6,6 +6,7 @@ import type {
   DriverVerificationHistoryEntry,
   ForecastCell,
   Metrics,
+  MobilityZoneInsight,
   NearbyDriver,
   PoolCandidate,
   PoolPlan,
@@ -38,9 +39,11 @@ export interface RidePersonView {
 export interface RideDriverView {
   id: string;
   vehicleType: string;
+  vehicleRegistration?: string | null;
   status: DriverStatus;
   lat: number;
   lng: number;
+  locationUpdatedAt?: string;
   acceptanceRate: number;
   completedToday: number;
   user: RidePersonView;
@@ -87,7 +90,8 @@ export interface AdminOverviewMetrics {
   offlineDrivers: number;
   activeRides: number;
   completedRidesToday: number;
-  averagePassengerWaitSec: number;
+  acceptedRidesToday: number;
+  averagePassengerWaitSec: number | null;
   driverUtilization: number;
   totalPassengers: number;
 }
@@ -97,9 +101,11 @@ export interface DriverAdminView {
   name: string;
   email: string;
   vehicleType: string;
+  vehicleRegistration?: string | null;
   status: DriverStatus;
   lat: number;
   lng: number;
+  locationUpdatedAt?: string;
   acceptanceRate: number;
   completedToday: number;
   busyMinutesToday: number;
@@ -139,6 +145,14 @@ export interface ZoneIntelligenceResponse {
   recommendations: Recommendation[];
 }
 
+export interface MobilityIntelligenceResponse {
+  city: string;
+  generatedAt: string;
+  windowMinutes: number;
+  staleLocationThresholdSeconds: number;
+  zones: MobilityZoneInsight[];
+}
+
 export interface DriverZoneInsight extends ZoneSnapshot {
   distanceKm: number;
   recentRequests15m: number;
@@ -147,6 +161,7 @@ export interface DriverZoneInsight extends ZoneSnapshot {
 }
 
 export interface DriverDemandInsightsResponse {
+  driverLocation: LatLng;
   currentZone: DriverZoneInsight;
   nearbyZones: DriverZoneInsight[];
   recommendation: {

@@ -31,6 +31,11 @@ export function emitToRole(role: string, event: string, payload: unknown) {
   server?.to(`role:${role}`).emit(event, payload);
 }
 
+/** Refresh signal only; clients fetch the authorized aggregated zone snapshot. */
+export function emitZonesUpdate() {
+  server?.emit(SOCKET_EVENTS.ZONES_UPDATE, { at: new Date().toISOString() });
+}
+
 /** Notify one user with the standard notification payload shape. */
 export function notifyUser(
   userId: string,

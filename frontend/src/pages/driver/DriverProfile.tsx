@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { DriverAdminView } from "@ps02/shared";
 import { useAuth } from "../../hooks/useAuth";
@@ -16,15 +17,39 @@ import {
   initials,
 } from "../../utils/format";
 import { Icon } from "../../components/ui/Icon";
+import { errorMessage } from "../../services/api";
 
 export function DriverProfile() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [registration, setRegistration] = useState("");
+  const [savingRegistration, setSavingRegistration] = useState(false);
+  const [registrationMessage, setRegistrationMessage] = useState<string | null>(null);
 
   const { data, loading, error, reload } = useAsync<{ driver: DriverAdminView }>(
     () => driverApi.me(),
     [],
   );
+
+  useEffect(() => {
+    if (data?.driver.vehicleRegistration) {
+      setRegistration(data.driver.vehicleRegistration);
+    }
+  }, [data?.driver.vehicleRegistration]);
+
+  const saveRegistration = async () => {
+    setSavingRegistration(true);
+    setRegistrationMessage(null);
+    try {
+      await driverApi.updateVehicleRegistration(registration.trim());
+      setRegistrationMessage("Vehicle registration saved.");
+      await reload();
+    } catch (saveError) {
+      setRegistrationMessage(errorMessage(saveError));
+    } finally {
+      setSavingRegistration(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -111,11 +136,37 @@ export function DriverProfile() {
                   </Button>
                 </div>
                 <p className="text-xs text-ink-400">
-                  Driver profile editing is not exposed by this build's API.
+                  Add your vehicle registration so passengers can identify your vehicle.
                 </p>
               </CardBody>
             </Card>
           </div>
+          <Card>
+            <CardHeader title="Vehicle details" subtitle="Visible to passengers assigned to your rides." />
+            <CardBody className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="flex-1 text-sm font-medium text-ink-700">
+                Registration number
+                <input
+                  value={registration}
+                  onChange={(event) => setRegistration(event.target.value.toUpperCase())}
+                  maxLength={16}
+                  autoComplete="off"
+                  placeholder="KA 01 AB 1234"
+                  className="mt-1 h-11 w-full rounded-xl border border-ink-200 px-3 text-sm"
+                  aria-describedby="registration-help"
+                />
+                <span id="registration-help" className="mt-1 block text-xs text-ink-400">
+                  Use 5-16 letters, numbers, spaces or hyphens.
+                </span>
+              </label>
+              <Button loading={savingRegistration} onClick={() => void saveRegistration()}>
+                Save registration
+              </Button>
+              {registrationMessage ? (
+                <p role="status" className="text-sm text-ink-600">{registrationMessage}</p>
+              ) : null}
+            </CardBody>
+          </Card>
         </>
       )}
     </div>

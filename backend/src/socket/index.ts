@@ -8,6 +8,7 @@ import { applyChaos } from "../services/chaos";
 import * as driversService from "../services/drivers";
 import { respondToOffer } from "../services/dispatch";
 import { emitToAdmins, setRealtimeServer } from "../services/realtime";
+import { publishDriverLocation } from "../services/driverTracking";
 
 const locationSchema = z.object({
   lat: z.number().finite().min(-90).max(90),
@@ -87,6 +88,7 @@ export function attachSocket(server: http.Server) {
           status: driver.status,
           at: new Date().toISOString(),
         });
+        await publishDriverLocation(auth.driverId, { lat: driver.lat, lng: driver.lng });
       }),
     );
 

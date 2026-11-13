@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -17,8 +18,13 @@ interface Toast {
   message?: string;
 }
 
+interface ToastOptions {
+  durationMs?: number;
+  eventKey?: string;
+}
+
 interface ToastContextValue {
-  push: (kind: ToastKind, title: string, message?: string) => void;
+  push: (kind: ToastKind, title: string, message?: string, options?: ToastOptions) => void;
   dismiss: (id: number) => void;
 }
 
@@ -41,20 +47,49 @@ const KIND_DOT: Record<ToastKind, string> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(1);
+  const timers = useRef(new Map<number, number>());
+  const recentEvents = useRef(new Map<string, number>());
 
   const dismiss = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer !== undefined) window.clearTimeout(timer);
+    timers.current.delete(id);
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
   const push = useCallback(
-    (kind: ToastKind, title: string, message?: string) => {
+    (kind: ToastKind, title: string, message?: string, options?: ToastOptions) => {
+      const now = Date.now();
+      for (const [key, expiresAt] of recentEvents.current) {
+        if (expiresAt <= now) recentEvents.current.delete(key);
+      }
+      if (options?.eventKey && recentEvents.current.has(options.eventKey)) return;
+      if (options?.eventKey) recentEvents.current.set(options.eventKey, now + 60_000);
+
       const id = nextId.current;
       nextId.current += 1;
-      setToasts((current) => [...current.slice(-3), { id, kind, title, message }]);
-      window.setTimeout(() => dismiss(id), 5000);
+      const toast: Toast = { id, kind, title, message };
+      setToasts((current) => {
+        const next = [...current, toast];
+        const removed = next.slice(0, Math.max(0, next.length - 4));
+        for (const previous of removed) {
+          const timer = timers.current.get(previous.id);
+          if (timer !== undefined) window.clearTimeout(timer);
+          timers.current.delete(previous.id);
+        }
+        return next.slice(-4);
+      });
+      const duration = Math.max(0, options?.durationMs ?? 5000);
+      const timer = window.setTimeout(() => dismiss(id), duration);
+      timers.current.set(id, timer);
     },
     [dismiss],
   );
+
+  useEffect(() => () => {
+    for (const timer of timers.current.values()) window.clearTimeout(timer);
+    timers.current.clear();
+  }, []);
 
   const value = useMemo(() => ({ push, dismiss }), [push, dismiss]);
 

@@ -65,3 +65,9 @@ driversRouter.post(
   validate({ body: controller.locationSchema }),
   asyncHandler(controller.updateLocation),
 );
+driversRouter.put(
+  "/vehicle-registration",
+  requireRole(Role.DRIVER),
+  validate({ body: controller.vehicleRegistrationSchema }),
+  asyncHandler(controller.updateVehicleRegistration),
+);

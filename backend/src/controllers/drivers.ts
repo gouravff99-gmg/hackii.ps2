@@ -7,6 +7,7 @@ import * as driversService from "../services/drivers";
 import { getDriverDemandInsights } from "../services/zones";
 import { emitToAdmins } from "../services/realtime";
 import { ApiError } from "../utils/ApiError";
+import { publishDriverLocation } from "../services/driverTracking";
 
 export const nearbyQuerySchema = z.object({
   lat: z.coerce.number().finite().min(-90).max(90),
@@ -21,6 +22,11 @@ export const statusSchema = z.object({
 export const locationSchema = z.object({
   lat: z.number().finite().min(-90).max(90),
   lng: z.number().finite().min(-180).max(180),
+});
+
+export const vehicleRegistrationSchema = z.object({
+  registration: z.string().trim().max(16).transform((value) => value.toUpperCase())
+    .refine((value) => value === "" || /^[A-Z0-9 -]{5,16}$/.test(value), "Enter a valid vehicle registration"),
 });
 
 export const driverIdParamSchema = z.object({ driverId: z.string().min(1).max(64) });
@@ -71,6 +77,14 @@ export async function updateLocation(req: Request, res: Response) {
     status: driver.status,
     at: new Date().toISOString(),
   });
+  await publishDriverLocation(driverId, { lat: driver.lat, lng: driver.lng });
 
+  res.json({ driver });
+}
+
+export async function updateVehicleRegistration(req: Request, res: Response) {
+  const driverId = driverIdOf(req);
+  const { registration } = req.validated.body as z.infer<typeof vehicleRegistrationSchema>;
+  const driver = await driversService.updateVehicleRegistration(driverId, registration || null);
   res.json({ driver });
 }

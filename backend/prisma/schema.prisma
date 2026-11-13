@@ -61,6 +61,7 @@ enum RideStatus {
   REQUESTED
   ACCEPTED
   ARRIVING
+  ARRIVED
   ONGOING
   COMPLETED
   CANCELLED
@@ -91,9 +92,11 @@ model Driver {
   userId           String       @unique
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicleType      String       @default("SEDAN")
+  vehicleRegistration String?
   status           DriverStatus @default(OFFLINE)
   lat              Float        @default(12.9716)
   lng              Float        @default(77.5946)
+  locationUpdatedAt DateTime     @default(now())
   acceptanceRate   Float        @default(1)
   completedToday   Int          @default(0)
   busyMinutesToday Float        @default(0)
@@ -177,6 +180,9 @@ model Ride {
   etaMin          Float
   fareEstimate    Float
   fareFinal       Float?
+  actualDistanceKm Float @default(0)
+  passengerRating Int?
+  passengerFeedback String?
   surgeMultiplier Float      @default(1)
   requestedAt     DateTime   @default(now())
   acceptedAt      DateTime?

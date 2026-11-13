@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DriverStatus,
   RideStatus,
@@ -26,6 +26,7 @@ import { Toggle } from "../../components/ui/Toggle";
 import { Spinner } from "../../components/ui/Spinner";
 import { ErrorState, EmptyState } from "../../components/ui/EmptyState";
 import { MapCanvas, type MapMarker } from "../../components/map/MapCanvas";
+import { DriverOpportunityMap } from "../../components/map/DriverOpportunityMap";
 import { OfferCard } from "../../components/rides/OfferCard";
 import { RideStatusStepper } from "../../components/rides/RideStatusStepper";
 import {
@@ -83,6 +84,42 @@ export function DriverDashboard() {
   const driver = data?.driver ?? null;
   const isOnline = driver ? driver.status !== DriverStatus.OFFLINE : false;
   const isBusy = driver?.status === DriverStatus.BUSY;
+  const lastGpsSent = useRef<{ at: number; lat: number; lng: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOnline || !navigator.geolocation) return;
+    let active = true;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (!active) return;
+        const { latitude: lat, longitude: lng } = position.coords;
+        const previous = lastGpsSent.current;
+        const movedKm = previous
+          ? Math.hypot(
+              (lat - previous.lat) * 110.574,
+              (lng - previous.lng) * 111.32 * Math.cos((lat * Math.PI) / 180),
+            )
+          : Number.POSITIVE_INFINITY;
+        if (previous && Date.now() - previous.at < 5000 && movedKm < 0.05) return;
+        lastGpsSent.current = { at: Date.now(), lat, lng };
+        void driverApi.updateLocation(lat, lng).catch((error: unknown) => {
+          toast.push("error", "Live location update failed", errorMessage(error));
+        });
+      },
+      () =>
+        toast.push(
+          "warning",
+          "GPS unavailable",
+          "Enable location access to share your live position during rides.",
+        ),
+      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
+    );
+    return () => {
+      active = false;
+      navigator.geolocation.clearWatch(watchId);
+      lastGpsSent.current = null;
+    };
+  }, [isOnline, toast]);
 
   const todayCompleted = (data?.history ?? []).filter(
     (ride) => ride.status === RideStatus.COMPLETED && isToday(ride.completedAt),
@@ -129,7 +166,7 @@ export function DriverDashboard() {
     }
   };
 
-  const advance = async (next: "ARRIVING" | "ONGOING" | "COMPLETED") => {
+  const advance = async (next: "ARRIVING" | "ARRIVED" | "ONGOING" | "COMPLETED") => {
     if (!data?.active) return;
     setAdvancing(true);
     try {
@@ -313,6 +350,8 @@ export function DriverDashboard() {
         </Card>
       </div>
 
+      <DriverOpportunityMap location={{ lat: driver.lat, lng: driver.lng }} />
+
       <Card>
         <CardHeader
           title="Current ride"
@@ -360,10 +399,15 @@ export function DriverDashboard() {
               <div className="flex flex-wrap gap-2">
                 {data.active.status === RideStatus.ACCEPTED ? (
                   <Button loading={advancing} onClick={() => void advance("ARRIVING")}>
-                    I have arrived at pickup
+                    Start driving to pickup
                   </Button>
                 ) : null}
                 {data.active.status === RideStatus.ARRIVING ? (
+                  <Button loading={advancing} onClick={() => void advance("ARRIVED")}>
+                    I have arrived
+                  </Button>
+                ) : null}
+                {data.active.status === RideStatus.ARRIVED ? (
                   <Button loading={advancing} onClick={() => void advance("ONGOING")}>
                     Start trip
                   </Button>

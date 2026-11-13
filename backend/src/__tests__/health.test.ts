@@ -35,3 +35,12 @@ describe("GET /api/health", () => {
     expect(body.error.message).toContain("/api/nope");
   });
 });
+
+describe("GET /api/intelligence/zones", () => {
+  it("requires an authenticated RideOps role", async () => {
+    const res = await fetch(`${base}/api/intelligence/zones`);
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("unauthorized");
+  });
+});

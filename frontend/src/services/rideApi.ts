@@ -8,6 +8,7 @@ import type {
   RideDetailView,
   RideListResponse,
   RideOfferPayload,
+  RouteResult,
 } from "@ps02/shared";
 import { api } from "./api";
 
@@ -21,11 +22,17 @@ export const rideApi = {
   get(rideId: string) {
     return api.get<RideDetailResponse>(`/rides/${rideId}`);
   },
+  trackingRoute(rideId: string, origin: LatLng) {
+    return api.post<RouteResult>(`/rides/${rideId}/tracking-route`, origin);
+  },
   history() {
     return api.get<RideListResponse>("/rides/history");
   },
   cancel(rideId: string) {
     return api.post<RideDetailResponse>(`/rides/${rideId}/cancel`);
+  },
+  rate(rideId: string, rating: number, feedback?: string) {
+    return api.post<{ ride: Ride }>(`/rides/${rideId}/rating`, { rating, feedback });
   },
   driverActive() {
     return api.get<DriverActiveRideResponse>("/rides/driver/active");
@@ -41,7 +48,7 @@ export const rideApi = {
       accept,
     });
   },
-  advance(rideId: string, status: "ARRIVING" | "ONGOING" | "COMPLETED") {
+  advance(rideId: string, status: "ARRIVING" | "ARRIVED" | "ONGOING" | "COMPLETED") {
     return api.post<RideDetailResponse>(`/rides/${rideId}/advance`, { status });
   },
   driverCancel(rideId: string) {

@@ -27,6 +27,7 @@ import {
 const ACTIVE_RIDE_STATUSES: RideStatus[] = [
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.ONGOING,
 ];
 

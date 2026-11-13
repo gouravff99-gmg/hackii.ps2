@@ -31,7 +31,19 @@ ridesRouter.post(
 );
 
 ridesRouter.get("/:rideId", rideParams, asyncHandler(controller.getById));
+ridesRouter.post(
+  "/:rideId/tracking-route",
+  rideParams,
+  validate({ body: controller.locationSchema }),
+  asyncHandler(controller.trackingRoute),
+);
 ridesRouter.post("/:rideId/cancel", rideParams, asyncHandler(controller.cancel));
+ridesRouter.post(
+  "/:rideId/rating",
+  requireRole(Role.PASSENGER),
+  validate({ params: controller.idParamSchema, body: controller.ratingSchema }),
+  asyncHandler(controller.rate),
+);
 
 ridesRouter.post(
   "/:rideId/respond",

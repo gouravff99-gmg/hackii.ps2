@@ -3,15 +3,15 @@ import { Icon } from "../ui/Icon";
 
 const STEPS: { status: RideStatus; label: string }[] = [
   { status: RideStatus.REQUESTED, label: "Requested" },
-  { status: RideStatus.ACCEPTED, label: "Accepted" },
-  { status: RideStatus.ARRIVING, label: "Arriving" },
+  { status: RideStatus.ACCEPTED, label: "Driver assigned" },
+  { status: RideStatus.ARRIVING, label: "To pickup" },
+  { status: RideStatus.ARRIVED, label: "Arrived" },
   { status: RideStatus.ONGOING, label: "On trip" },
   { status: RideStatus.COMPLETED, label: "Completed" },
 ];
 
 /**
- * Five-stage live ride stepper. Reassigning is shown as a warning on the
- * "Accepted" stage rather than a separate step, because it is transient.
+ * Ride stepper. Reassigning is shown as a warning on the request stage.
  */
 export function RideStatusStepper({ status }: { status: RideStatus }) {
   if (status === RideStatus.CANCELLED) {

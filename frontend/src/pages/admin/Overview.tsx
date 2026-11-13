@@ -90,8 +90,8 @@ export function Overview() {
         />
         <StatCard
           label="Avg passenger wait"
-          value={formatWait(metrics.averagePassengerWaitSec)}
-          hint="Time from request to acceptance"
+          value={metrics.averagePassengerWaitSec === null ? "—" : formatWait(metrics.averagePassengerWaitSec)}
+          hint={`${metrics.acceptedRidesToday} accepted rides with wait data today`}
           icon="clock"
           tone="warning"
         />

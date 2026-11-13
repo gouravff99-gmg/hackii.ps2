@@ -6,7 +6,8 @@ forecasting, zone/surge intelligence, pooling, explainable allocation, reassignm
 simulator and an evaluation dashboard.
 
 - **Passenger:** address search, map/GPS pickup and destination selection with reverse-geocoded
-  labels, nearby drivers, route/fare/surge estimate, live ride progress, allocation explanation and
+  labels, nearby drivers, route/fare/surge estimate, optional aggregated pickup-zone intelligence
+  with user-controlled nearby pickup suggestions, live ride progress, allocation explanation and
   ride history.
 - **Driver:** availability, timed ride offers, ride progress, pooled stop order, trip history,
   document onboarding and verification status, plus location-aware demand and repositioning guidance.
@@ -124,9 +125,36 @@ history unless passed `--reset`. `train.py` evaluates a date-based holdout, writ
   driver offer, with retries and passenger notification when no candidate is available.
 - **Zones/surge:** a 20 × 20 grid blends recent requests with forecasts when available, compares
   demand with available supply, and calculates surge per zone.
+- **Unified mobility intelligence:** authenticated clients can read the aggregated
+  `GET /api/intelligence/zones` baseline shared by passenger, driver and admin experiences. It
+  separates measured and simulated requests, includes fresh eligible available/busy driver counts,
+  marks forecast/live/simulation sources and confidence, and labels availability pressure without
+  claiming ride acceptance. Admins may pass `?hour=0..23` to select hourly forecasts. The admin
+  demand page includes an operations control tower with a single-select demand, dropoff, forecast,
+  supply, gap or coverage layer, a matching legend, zone selection, and fleet/assignment-wait KPIs.
+  Activity uses a normalized six-step blue-to-red scale; supply, shortage and coverage have separate
+  legends and meanings. Zone-level assignment
+  wait uses measured accepted rides in the trailing seven days, with sample counts. The city-wide
+  average wait includes its accepted-ride sample count and is unavailable when there are no samples.
+  Driver locations are aggregated into zone counts and are not returned.
+  Ride lifecycle, driver availability, and zone-boundary location changes send a `zones:update`
+  refresh signal; clients reconcile against the API and also refresh periodically.
+  The grid uses the configured city in `shared/src/config.ts` (currently Bengaluru); Belagavi has
+  no verified zone boundary or live demand dataset configured.
 - **Driver demand:** the driver workspace separates observed requests in the recent 15-minute window
   from model forecasts and simulator traffic, shows expected peak periods, and suggests a destination
   zone when available supply can be repositioned toward a deficit.
+- **Karnataka statewide demo heatmap:** the admin demand page includes deterministic sample demand
+  for all 31 districts, with time-of-day, weekday/weekend and scenario filters. Values are synthetic
+  and isolated from ride records. Markers use approximate district-headquarters/operational-center
+  coordinates only; this view does not contain official boundaries and must not be used as live
+  district-level operational data.
+- The driver opportunity map uses a transparent baseline score: observed pressure 40%, hourly
+  forecast 30%, recent requests 20%, and approximate accessibility 10%. Missing inputs are omitted
+  and remaining weights renormalized. The score is not a probability of a ride or an earning estimate;
+  simulation sources are explicitly labelled, the map uses a blue-to-red opportunity legend with
+  grey for insufficient evidence, and navigation is always driver-controlled. Passenger availability
+  uses green for better supply through red for high pressure, with grey for insufficient data.
 - **Pooling:** nearby pending rides are evaluated for valid pickup/drop ordering and detour limits;
   pooled fare uses the configured discount.
 - **Simulator/evaluation:** a seeded driver fleet generates requests and ride lifecycles; evaluation

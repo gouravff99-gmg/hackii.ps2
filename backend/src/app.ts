@@ -7,6 +7,7 @@ import { authRouter } from "./routes/auth";
 import { driversRouter } from "./routes/drivers";
 import { geocodingRouter } from "./routes/geocoding";
 import { healthRouter } from "./routes/health";
+import { intelligenceRouter } from "./routes/intelligence";
 import { ridesRouter } from "./routes/rides";
 
 /** Builds the Express app (no listening) so tests can start it on any port. */
@@ -29,6 +30,7 @@ export function createApp() {
   app.use("/api/drivers", driversRouter);
   app.use("/api/geocoding", geocodingRouter);
   app.use("/api/rides", ridesRouter);
+  app.use("/api/intelligence", intelligenceRouter);
   app.use("/api/admin", adminRouter);
 
   app.use(notFoundHandler);

@@ -33,6 +33,7 @@ const CANCELLABLE: RideStatus[] = [
   RideStatus.REQUESTED,
   RideStatus.ACCEPTED,
   RideStatus.ARRIVING,
+  RideStatus.ARRIVED,
   RideStatus.REASSIGNING,
 ];
 

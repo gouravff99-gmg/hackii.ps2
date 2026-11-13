@@ -51,6 +51,7 @@ const RIDE_STATUS_LABELS: Record<RideStatus, string> = {
   REQUESTED: "Finding a driver",
   ACCEPTED: "Driver assigned",
   ARRIVING: "Driver arriving",
+  ARRIVED: "Driver arrived",
   ONGOING: "Trip in progress",
   COMPLETED: "Completed",
   CANCELLED: "Cancelled",
@@ -67,6 +68,7 @@ export function rideStatusTone(status: RideStatus): BadgeTone {
       return "warning";
     case RideStatus.ACCEPTED:
     case RideStatus.ARRIVING:
+    case RideStatus.ARRIVED:
       return "info";
     case RideStatus.ONGOING:
       return "accent";

@@ -10,6 +10,7 @@ import { prisma } from "../lib/prisma";
 import { computeSurge, demandSupplyRatio } from "./surge";
 import { haversineKm, pointInBounds, ZONE_GRID, zoneCenter, zoneIdFor } from "./geo";
 import { ApiError } from "../utils/ApiError";
+import { eligibleDriverWhere } from "./driverEligibility";
 
 /** Demand is measured over this trailing window, then scaled to an hourly rate. */
 export const DEMAND_WINDOW_MINUTES = 15;
@@ -44,7 +45,15 @@ export async function getZoneMetrics(options: ZoneMetricsOptions = {}): Promise<
       select: { pickupLat: true, pickupLng: true },
     }),
     prisma.driver.findMany({
-      where: { status: PrismaDriverStatus.AVAILABLE },
+      where: {
+        AND: [
+          {
+            status: PrismaDriverStatus.AVAILABLE,
+            locationUpdatedAt: { gte: new Date(now.getTime() - 2 * 60_000) },
+          },
+          eligibleDriverWhere({ now }),
+        ],
+      },
       select: { lat: true, lng: true },
     }),
     prisma.demandForecast.findMany({
@@ -55,12 +64,14 @@ export async function getZoneMetrics(options: ZoneMetricsOptions = {}): Promise<
 
   const observed = new Map<string, number>();
   for (const ride of recentRides) {
+    if (!pointInBounds(ride.pickupLat, ride.pickupLng)) continue;
     const zoneId = zoneIdFor(ride.pickupLat, ride.pickupLng);
     observed.set(zoneId, (observed.get(zoneId) ?? 0) + 1);
   }
 
   const supplyByZone = new Map<string, number>();
   for (const driver of availableDrivers) {
+    if (!pointInBounds(driver.lat, driver.lng)) continue;
     const zoneId = zoneIdFor(driver.lat, driver.lng);
     supplyByZone.set(zoneId, (supplyByZone.get(zoneId) ?? 0) + 1);
   }
@@ -149,7 +160,7 @@ export async function getDriverDemandInsights(
 ): Promise<DriverDemandInsightsResponse> {
   const driver = await prisma.driver.findUnique({
     where: { id: driverId },
-    select: { lat: true, lng: true, status: true, isSimulated: true },
+    select: { lat: true, lng: true, status: true, isSimulated: true, locationUpdatedAt: true },
   });
   if (!driver) throw ApiError.notFound("Driver profile not found");
 
@@ -196,6 +207,7 @@ export async function getDriverDemandInsights(
   const target = suggestion ? zonesById.get(suggestion.toZone) : undefined;
 
   return {
+    driverLocation: point,
     currentZone: toInsight(current),
     nearbyZones,
     recommendation:

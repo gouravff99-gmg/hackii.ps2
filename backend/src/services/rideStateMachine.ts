@@ -2,7 +2,7 @@ import { Prisma, RideStatus } from "@prisma/client";
 import { ROOMS, SOCKET_EVENTS, type RideStatusPayload } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
-import { emitToAdmins, emitToRide, emitToUser } from "./realtime";
+import { emitToAdmins, emitToRide, emitToUser, emitZonesUpdate } from "./realtime";
 
 /**
  * The ONLY place ride status changes are validated and persisted.
@@ -11,7 +11,8 @@ import { emitToAdmins, emitToRide, emitToUser } from "./realtime";
 export const RIDE_TRANSITIONS: Record<RideStatus, RideStatus[]> = {
   REQUESTED: [RideStatus.ACCEPTED, RideStatus.REASSIGNING, RideStatus.CANCELLED],
   ACCEPTED: [RideStatus.ARRIVING, RideStatus.REASSIGNING, RideStatus.CANCELLED],
-  ARRIVING: [RideStatus.ONGOING, RideStatus.REASSIGNING, RideStatus.CANCELLED],
+  ARRIVING: [RideStatus.ARRIVED, RideStatus.ONGOING, RideStatus.REASSIGNING, RideStatus.CANCELLED],
+  ARRIVED: [RideStatus.ONGOING, RideStatus.REASSIGNING, RideStatus.CANCELLED],
   ONGOING: [RideStatus.COMPLETED],
   COMPLETED: [],
   CANCELLED: [],
@@ -85,6 +86,7 @@ export async function transitionRide(args: TransitionArgs): Promise<RideWithPeop
   });
 
   emitRideStatus(updated, args.etaMin, args.message);
+  emitZonesUpdate();
   return updated;
 }
 
