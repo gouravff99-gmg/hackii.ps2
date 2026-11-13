@@ -13,17 +13,17 @@ import type {
 import { api } from "./api";
 
 export const rideApi = {
-  estimate(pickup: LatLng, drop: LatLng) {
-    return api.post<EstimateResponse>("/rides/estimate", { pickup, drop });
+  estimate(pickup: LatLng, drop: LatLng, category?: string, signal?: AbortSignal) {
+    return api.post<EstimateResponse>("/rides/estimate", { pickup, drop, category }, { signal });
   },
-  create(pickup: LatLng, drop: LatLng) {
-    return api.post<{ ride: Ride }>("/rides", { pickup, drop });
+  create(pickup: LatLng, drop: LatLng, category?: string) {
+    return api.post<{ ride: Ride }>("/rides", { pickup, drop, category });
   },
   get(rideId: string) {
     return api.get<RideDetailResponse>(`/rides/${rideId}`);
   },
-  trackingRoute(rideId: string, origin: LatLng) {
-    return api.post<RouteResult>(`/rides/${rideId}/tracking-route`, origin);
+  trackingRoute(rideId: string, origin: LatLng, signal?: AbortSignal) {
+    return api.post<RouteResult>(`/rides/${rideId}/tracking-route`, origin, { signal });
   },
   history() {
     return api.get<RideListResponse>("/rides/history");

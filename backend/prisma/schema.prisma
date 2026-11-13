@@ -73,6 +73,12 @@ enum SimStrategy {
   SMART
 }
 
+enum VehicleCategory {
+  BIKE
+  CAR
+  POOL
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -93,6 +99,10 @@ model Driver {
   user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   vehicleType      String       @default("SEDAN")
   vehicleRegistration String?
+  // Passenger-facing service category; vehicleType stays the body style.
+  vehicleCategory  VehicleCategory @default(CAR)
+  poolEnabled      Boolean      @default(true)
+  seatCapacity     Int          @default(4)
   status           DriverStatus @default(OFFLINE)
   lat              Float        @default(12.9716)
   lng              Float        @default(77.5946)
@@ -108,6 +118,7 @@ model Driver {
   onboarding DriverOnboarding?
 
   @@index([status])
+  @@index([vehicleCategory, status])
 }
 
 model DriverOnboarding {
@@ -176,6 +187,7 @@ model Ride {
   dropLat         Float
   dropLng         Float
   status          RideStatus @default(REQUESTED)
+  category        VehicleCategory @default(CAR)
   distanceKm      Float
   etaMin          Float
   fareEstimate    Float
@@ -201,6 +213,7 @@ model Ride {
   @@index([driverId])
   @@index([status])
   @@index([requestedAt])
+  @@index([category, requestedAt])
 }
 
 model RideEvent {

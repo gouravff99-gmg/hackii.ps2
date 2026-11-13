@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { INDIA_BOUNDS, INDIA_CENTER, type EstimateResponse, type LatLng, type NearbyDriver } from "@ps02/shared";
+import { INDIA_BOUNDS, INDIA_CENTER, VehicleCategory, type EstimateResponse, type LatLng, type NearbyDriver } from "@ps02/shared";
 import { Badge } from "../../components/ui/Badge";
 import { Button } from "../../components/ui/Button";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
@@ -8,6 +8,7 @@ import { ErrorState } from "../../components/ui/EmptyState";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { Spinner } from "../../components/ui/Spinner";
 import { RideLocationPicker } from "../../components/map/RideLocationPicker";
+import { PassengerAreaDemand } from "./PassengerAreaDemand";
 import { useAuth } from "../../hooks/useAuth";
 import { useRideLocations } from "../../hooks/useRideLocations";
 import { useToast } from "../../hooks/useToast";
@@ -36,9 +37,15 @@ function isValidPoint(point: LatLng): boolean {
   );
 }
 
-function routeKey(pickup: LatLng, drop: LatLng): string {
-  return `${pickup.lat},${pickup.lng}|${drop.lat},${drop.lng}`;
+function routeKey(pickup: LatLng, drop: LatLng, category: VehicleCategory): string {
+  return `${pickup.lat},${pickup.lng}|${drop.lat},${drop.lng}|${category}`;
 }
+
+const CATEGORY_OPTIONS: { id: VehicleCategory; label: string; hint: string }[] = [
+  { id: VehicleCategory.BIKE, label: "Bike", hint: "Fast, low fare" },
+  { id: VehicleCategory.CAR, label: "Car", hint: "Private car" },
+  { id: VehicleCategory.POOL, label: "Pooling", hint: "Shared car, lower fare" },
+];
 
 function validEstimate(estimate: EstimateResponse): boolean {
   return (
@@ -60,11 +67,13 @@ export function BookRide() {
   const toast = useToast();
   const { user, logout } = useAuth();
   const locations = useRideLocations();
+  const [category, setCategory] = useState<VehicleCategory>(VehicleCategory.CAR);
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
   const [estimateKey, setEstimateKey] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [nearby, setNearby] = useState<NearbyDriver[]>([]);
+  const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
   const [bookingState, setBookingState] = useState<BookingState>("IDLE");
@@ -73,13 +82,19 @@ export function BookRide() {
 
   const pickup = locations.pickup;
   const drop = locations.drop;
-  const currentRouteKey = pickup && drop ? routeKey(pickup, drop) : null;
+  const currentRouteKey = pickup && drop ? routeKey(pickup, drop, category) : null;
   const routeReady =
     Boolean(estimate && currentRouteKey && estimateKey === currentRouteKey) &&
     !estimating &&
     !estimateError;
 
   useEffect(() => {
+    setEstimate(null);
+    setEstimateKey(null);
+    setEstimateError(null);
+    setEstimating(false);
+    setBookingError(null);
+
     if (!pickup && !drop) {
       setBookingState("IDLE");
       return;
@@ -93,12 +108,6 @@ export function BookRide() {
       return;
     }
 
-    setBookingError(null);
-    setEstimate(null);
-    setEstimateKey(null);
-    setEstimateError(null);
-    setEstimating(false);
-
     if (!isValidPoint(pickup) || !isValidPoint(drop)) {
       setEstimateError("Choose pickup and destination within India.");
       setBookingState("ERROR");
@@ -110,14 +119,14 @@ export function BookRide() {
       return;
     }
 
-    let active = true;
-    const key = routeKey(pickup, drop);
+    const controller = new AbortController();
+    const key = routeKey(pickup, drop, category);
     setBookingState("CALCULATING_ROUTE");
     setEstimating(true);
     rideApi
-      .estimate(pickup, drop)
+      .estimate(pickup, drop, category, controller.signal)
       .then((response) => {
-        if (!active) return;
+        if (controller.signal.aborted) return;
         if (!validEstimate(response)) {
           throw new Error("The route service returned an invalid distance, duration or fare. Please retry.");
         }
@@ -126,39 +135,46 @@ export function BookRide() {
         setBookingState("ROUTE_READY");
       })
       .catch((error: unknown) => {
-        if (!active) return;
+        if (controller.signal.aborted) return;
         setEstimate(null);
         setEstimateKey(null);
         setEstimateError(errorMessage(error));
         setBookingState("ERROR");
       })
       .finally(() => {
-        if (active) setEstimating(false);
+        if (!controller.signal.aborted) setEstimating(false);
       });
 
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [pickup?.lat, pickup?.lng, drop?.lat, drop?.lng, routeRetry]);
+  }, [pickup?.lat, pickup?.lng, drop?.lat, drop?.lng, category, routeRetry]);
 
   useEffect(() => {
     if (!pickup) {
       setNearby([]);
+      setNearbyError(null);
       return;
     }
-    let active = true;
+    const controller = new AbortController();
+    setNearbyError(null);
     driverApi
-      .nearby(pickup.lat, pickup.lng, 8)
+      .nearby(pickup.lat, pickup.lng, 8, category, controller.signal)
       .then((response) => {
-        if (active) setNearby(response.drivers);
+        if (!controller.signal.aborted) {
+          setNearby(response.drivers);
+          setNearbyError(null);
+        }
       })
-      .catch(() => {
-        if (active) setNearby([]);
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        setNearby([]);
+        setNearbyError(errorMessage(error));
       });
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [pickup?.lat, pickup?.lng]);
+  }, [pickup?.lat, pickup?.lng, category]);
 
   const book = async () => {
     if (submitting.current) return;
@@ -184,7 +200,7 @@ export function BookRide() {
     setBookingError(null);
     setBookingState("BOOKING");
     try {
-      const { ride } = await rideApi.create(pickup, drop);
+      const { ride } = await rideApi.create(pickup, drop, category);
       if (!ride.id) throw new Error("The server did not confirm the ride request.");
       toast.push("success", "Ride request confirmed", "Your ride is saved. Searching for an available driver.");
       navigate("/passenger/rides", { state: { rideId: ride.id } });
@@ -219,6 +235,37 @@ export function BookRide() {
         subtitle="The booking button becomes available as soon as the route and fare are ready."
       />
       <CardBody className="flex flex-col gap-4">
+        <div>
+          <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink-400">
+            Ride type
+          </p>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Ride type">
+            {CATEGORY_OPTIONS.map((option) => {
+              const active = category === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  disabled={booking}
+                  onClick={() => setCategory(option.id)}
+                  className={`rounded-xl border px-2 py-2 text-left transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                    active
+                      ? "border-brand-400 bg-brand-50 ring-1 ring-brand-200"
+                      : "border-ink-200 bg-white hover:bg-ink-50"
+                  }`}
+                >
+                  <span className={`block text-sm font-semibold ${active ? "text-brand-700" : "text-ink-900"}`}>
+                    {option.label}
+                  </span>
+                  <span className="block text-[10px] leading-4 text-ink-500">{option.hint}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {routeReady && estimate ? (
           <>
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -256,13 +303,9 @@ export function BookRide() {
               </Badge>
             </div>
             <p className="text-xs text-ink-500">
-              Route source: {estimate.source === "osrm" ? "OSRM road network" : "Haversine fallback"}.
+              {CATEGORY_OPTIONS.find((option) => option.id === category)?.label ?? "Car"} fare · route source:{" "}
+              {estimate.source === "osrm" ? "OSRM road network" : "Haversine fallback"}.
             </p>
-            {bookingError ? (
-              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">
-                {bookingError}
-              </p>
-            ) : null}
           </>
         ) : estimating ? (
           <div className="flex items-center justify-center gap-2 py-5 text-sm text-ink-500" aria-live="polite">
@@ -304,6 +347,8 @@ export function BookRide() {
       <RideLocationPicker
         locations={locations}
         nearby={nearby}
+        nearbyError={nearbyError}
+        disabled={booking}
         route={routeReady ? estimate?.polyline : undefined}
         onReset={() => {
           setEstimate(null);
@@ -314,11 +359,16 @@ export function BookRide() {
         bookingPanel={bookingPanel}
       />
 
+      <PassengerAreaDemand category={category} pickup={pickup} />
+
       {routeReady ? (
         <div className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-raised backdrop-blur lg:inset-x-auto lg:bottom-6 lg:right-6 lg:w-[420px] lg:rounded-2xl lg:border">
           <div className="mx-auto flex max-w-3xl items-center gap-3 lg:max-w-none">
             <div className="min-w-0 flex-1">
-              <p className="text-xs text-ink-500">Estimated fare · {formatKm(estimate!.distanceKm)} · {formatMinutes(estimate!.etaMin)}</p>
+              <p className="text-xs text-ink-500">
+                {CATEGORY_OPTIONS.find((option) => option.id === category)?.label ?? "Car"} ·{" "}
+                {formatKm(estimate!.distanceKm)} · {formatMinutes(estimate!.etaMin)}
+              </p>
               <p className="text-lg font-semibold text-ink-900">{formatCurrency(estimate!.fare, 0)}</p>
             </div>
             <Button

@@ -12,7 +12,7 @@ import {
 } from "react-leaflet";
 import { zoneHeatmapColor, zoneHeatmapLabel, zoneLayerValue } from "./zoneHeatmap";
 
-export type MarkerKind = "driver" | "pickup" | "drop" | "active" | "idle";
+export type MarkerKind = "driver" | "passenger" | "pickup" | "drop" | "active" | "idle";
 
 export interface MapMarker {
   id: string;
@@ -20,6 +20,8 @@ export interface MapMarker {
   lng: number;
   label?: string;
   kind?: MarkerKind;
+  accuracyMeters?: number;
+  heading?: number | null;
 }
 
 export type MapZoneLayer =
@@ -34,6 +36,7 @@ export type MapZoneLayer =
 
 const MARKER_STYLE: Record<MarkerKind, { color: string; fill: string; radius: number }> = {
   driver: { color: "#2049e3", fill: "#3566f6", radius: 5 },
+  passenger: { color: "#ffffff", fill: "#2563eb", radius: 8 },
   idle: { color: "#64748b", fill: "#94a3b8", radius: 4 },
   pickup: { color: "#047857", fill: "#10b981", radius: 7 },
   drop: { color: "#b91c1c", fill: "#ef4444", radius: 7 },
@@ -53,7 +56,7 @@ function Recenter({ target }: { target: LatLng }) {
   const map = useMap();
   useEffect(() => {
     map.panTo([target.lat, target.lng], { animate: true });
-  }, [map, target.lat, target.lng]);
+  }, [map, target]);
   return null;
 }
 
@@ -62,6 +65,18 @@ function SetViewport({ center, zoom }: { center: LatLng; zoom: number }) {
   useEffect(() => {
     map.setView([center.lat, center.lng], zoom);
   }, [map, center.lat, center.lng, zoom]);
+  return null;
+}
+
+function ResizeObserverControl() {
+  const map = useMap();
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => map.invalidateSize({ pan: false }));
+    observer.observe(map.getContainer());
+    map.invalidateSize({ pan: false });
+    return () => observer.disconnect();
+  }, [map]);
   return null;
 }
 
@@ -133,6 +148,7 @@ export function MapCanvas({
       attributionControl
       className={className}
     >
+      <ResizeObserverControl />
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -225,7 +241,9 @@ export function MapCanvas({
       ) : null}
 
       {markers.map((marker) => {
-        if (marker.kind === "driver") return <AnimatedDriverMarker key={marker.id} marker={marker} />;
+        if (marker.kind === "driver" || marker.kind === "passenger") {
+          return <AnimatedDriverMarker key={marker.id} marker={marker} />;
+        }
         const style = MARKER_STYLE[marker.kind ?? "driver"];
         return (
           <CircleMarker

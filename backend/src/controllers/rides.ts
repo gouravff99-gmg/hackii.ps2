@@ -1,5 +1,5 @@
 import { RideStatus as DbRideStatus } from "@prisma/client";
-import { RideStatus } from "@ps02/shared";
+import { RideStatus, VehicleCategory } from "@ps02/shared";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentAuth } from "../middleware/auth";
@@ -16,6 +16,8 @@ const pointSchema = z.object({
 export const placeSchema = z.object({
   pickup: pointSchema,
   drop: pointSchema,
+  /** BIKE / CAR / POOL. Defaults to CAR so existing clients keep working. */
+  category: z.nativeEnum(VehicleCategory).optional(),
 });
 
 export const locationSchema = pointSchema;

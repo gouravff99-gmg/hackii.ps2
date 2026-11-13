@@ -1,6 +1,7 @@
 import { Prisma, RideStatus } from "@prisma/client";
 import {
   Strategy,
+  VehicleCategory,
   type EstimateResponse,
   type LatLng,
   type RideStatusPayload,
@@ -9,7 +10,7 @@ import { prisma } from "../lib/prisma";
 import { emitZonesUpdate } from "./realtime";
 import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
-import { computeFare } from "./fare";
+import { computeCategoryFare } from "./fare";
 import { getRoute } from "./osrm";
 import { pointInIndiaBounds } from "./geo";
 import { validateRidePoints } from "./bookingValidation";
@@ -17,6 +18,7 @@ import { surgeForPickup } from "./zones";
 import { appendRideEvent, transitionRide } from "./rideStateMachine";
 import { clearDispatchState, dispatchRide } from "./dispatch";
 import { notifyUser } from "./realtime";
+import { getLatestDriverLocation } from "./drivers";
 
 const ACTIVE_STATUSES: RideStatus[] = [
   RideStatus.REQUESTED,
@@ -37,6 +39,8 @@ const TRACKING_STATUSES: RideStatus[] = [
 export interface RidePlaceInput {
   pickup: LatLng;
   drop: LatLng;
+  /** BIKE / CAR / POOL. Missing means CAR (legacy behaviour). */
+  category?: VehicleCategory;
 }
 
 function round2(value: number): number {
@@ -57,7 +61,8 @@ export async function estimateRide(input: RidePlaceInput): Promise<EstimateRespo
     throw ApiError.badRequest("A valid route could not be calculated for these locations");
   }
   const surge = await surgeForPickup(input.pickup.lat, input.pickup.lng);
-  const fare = computeFare(route.distanceKm, route.durationMin, surge);
+  const category = input.category ?? VehicleCategory.CAR;
+  const fare = computeCategoryFare(route.distanceKm, route.durationMin, surge, category);
 
   return {
     distanceKm: round2(route.distanceKm),
@@ -67,6 +72,7 @@ export async function estimateRide(input: RidePlaceInput): Promise<EstimateRespo
     surge,
     polyline: route.polyline,
     source: route.source,
+    category,
   };
 }
 
@@ -88,6 +94,7 @@ export async function createRide(
       dropLat: input.drop.lat,
       dropLng: input.drop.lng,
       status: RideStatus.REQUESTED,
+      category: input.category ?? VehicleCategory.CAR,
       distanceKm: estimate.distanceKm,
       etaMin: estimate.etaMin,
       fareEstimate: estimate.fare,
@@ -102,6 +109,7 @@ export async function createRide(
     pickup: input.pickup,
     drop: input.drop,
     surge: estimate.surge,
+    category: ride.category,
   });
   if (env.demoMode) {
     await appendRideEvent(
@@ -154,6 +162,10 @@ export async function getRideForViewer(rideId: string, viewer: Viewer): Promise<
 
   if (!isAdmin && !isPassenger && !isDriver) {
     throw ApiError.forbidden("You do not have access to this ride");
+  }
+  const latestLocation = ride.driverId ? getLatestDriverLocation(ride.driverId) : null;
+  if (ride.driver && latestLocation) {
+    return { ...ride, driver: { ...ride.driver, ...latestLocation } };
   }
   return ride;
 }
@@ -345,10 +357,11 @@ export async function advanceRide(
   if (next === RideStatus.COMPLETED) {
     const startedAt = ride.startedAt ?? ride.acceptedAt ?? ride.requestedAt;
     const durationMin = Math.max(1, (Date.now() - startedAt.getTime()) / 60_000);
-    const fareFinal = computeFare(
+    const fareFinal = computeCategoryFare(
       ride.actualDistanceKm > 0 ? ride.actualDistanceKm : ride.distanceKm,
       durationMin,
       ride.surgeMultiplier,
+      ride.category as unknown as VehicleCategory,
     );
 
     await transitionRide({

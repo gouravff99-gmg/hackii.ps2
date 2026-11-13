@@ -50,6 +50,7 @@ export function PickupIntelligencePanel({
   generatedAt,
   city,
   onUseSuggestion,
+  disabled = false,
 }: {
   zones: MobilityZoneInsight[];
   selectedZone: MobilityZoneInsight | null;
@@ -60,6 +61,7 @@ export function PickupIntelligencePanel({
   generatedAt?: string;
   city: string;
   onUseSuggestion: (point: LatLng) => void;
+  disabled?: boolean;
 }) {
   const [suggestionIgnored, setSuggestionIgnored] = useState(false);
   const suggestion =
@@ -119,7 +121,7 @@ export function PickupIntelligencePanel({
           </p>
         )}
 
-        {suggestion && !suggestionIgnored ? (
+        {suggestion && !suggestionIgnored && !disabled ? (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-brand-100 p-3">
             <p className="min-w-[180px] flex-1 text-xs text-ink-700">
               A pickup point about {Math.round(distanceKm(pickup!, suggestion.center) * 1000)} m away

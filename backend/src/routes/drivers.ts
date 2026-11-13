@@ -18,6 +18,12 @@ driversRouter.get(
 
 driversRouter.get("/me", requireRole(Role.DRIVER), asyncHandler(controller.me));
 driversRouter.get("/demand", requireRole(Role.DRIVER), asyncHandler(controller.demand));
+driversRouter.get(
+  "/opportunities",
+  requireRole(Role.DRIVER),
+  validate({ query: controller.opportunitiesQuerySchema }),
+  asyncHandler(controller.opportunities),
+);
 
 driversRouter.get(
   "/onboarding",

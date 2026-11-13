@@ -1,4 +1,5 @@
-import { DriverStatus, MATCHING, Strategy, type AllocationBreakdown, type LatLng } from "@ps02/shared";
+import { DriverStatus, MATCHING, Strategy, VehicleCategory, type AllocationBreakdown, type LatLng } from "@ps02/shared";
+import { VehicleCategory as PrismaVehicleCategory } from "@prisma/client";
 import { prisma } from "../lib/prisma";
 import { env } from "../config/env";
 import { haversineKm } from "./geo";
@@ -65,15 +66,32 @@ export async function allocateDriver(params: {
   radiusKm?: number;
   now?: Date;
   includeSimulated?: boolean;
+  /** Restrict candidates to a service category (BIKE / CAR / POOL). */
+  category?: VehicleCategory;
 }): Promise<AllocationResult> {
   const radiusKm = params.radiusKm ?? MATCHING.candidateRadiusKm;
   const now = params.now ?? new Date();
   const excluded = new Set(params.excludeDriverIds ?? []);
 
+  const categoryFilter =
+    params.category === VehicleCategory.BIKE
+      ? { vehicleCategory: PrismaVehicleCategory.BIKE }
+      : params.category === VehicleCategory.CAR
+        ? { vehicleCategory: PrismaVehicleCategory.CAR }
+        : params.category === VehicleCategory.POOL
+          ? {
+              OR: [
+                { vehicleCategory: PrismaVehicleCategory.POOL },
+                { vehicleCategory: PrismaVehicleCategory.CAR, poolEnabled: true },
+              ],
+            }
+          : {};
+
   const drivers = await prisma.driver.findMany({
     where: {
       AND: [
         { status: DriverStatus.AVAILABLE },
+        categoryFilter,
         eligibleDriverWhere({ now, includeSimulated: params.includeSimulated }),
       ],
     },

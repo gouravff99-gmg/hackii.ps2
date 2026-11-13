@@ -6,3 +6,5 @@ export * from "./api";
 export * from "./intelligence";
 export * from "./heatmap";
 export * from "./karnatakaDemo";
+export * from "./mobilityAreas";
+export * from "./mobilityDemand";

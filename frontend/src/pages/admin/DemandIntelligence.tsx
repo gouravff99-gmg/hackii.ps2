@@ -26,6 +26,7 @@ import { StatCard } from "../../components/ui/StatCard";
 import { Icon } from "../../components/ui/Icon";
 import { MobilityControlTower } from "./MobilityControlTower";
 import { KarnatakaDemoHeatmap } from "./KarnatakaDemoHeatmap";
+import { BelagaviAreaHeatmap } from "./BelagaviAreaHeatmap";
 
 type HeatMode = "predicted" | "actual" | "difference";
 
@@ -190,7 +191,7 @@ export function DemandIntelligence() {
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Demand intelligence"
-        description="Forecast demand against observed demand, see zone pressure, and act on repositioning suggestions."
+        description="Area-wise demand for Belagavi localities (Bike / Car / Pooling), plus the legacy Bengaluru forecast grid and statewide district demo."
         actions={
           <div className="flex items-center gap-2 rounded-xl border border-ink-200 bg-white px-3 py-2">
             <Icon name="clock" size={15} className="text-ink-400" />
@@ -217,6 +218,7 @@ export function DemandIntelligence() {
         }
       />
 
+      <BelagaviAreaHeatmap />
       <MobilityControlTower />
       <KarnatakaDemoHeatmap />
 

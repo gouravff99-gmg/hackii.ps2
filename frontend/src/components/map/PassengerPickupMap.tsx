@@ -14,19 +14,24 @@ import { PickupIntelligencePanel } from "./PickupIntelligencePanel";
 import type { useRideLocations } from "../../hooks/useRideLocations";
 import { useMobilityIntelligence } from "../../hooks/useMobilityIntelligence";
 import { formatMinutes } from "../../utils/format";
+import { useDeviceLocation } from "../../hooks/useDeviceLocation";
 
 export function PassengerPickupMap({
   locations,
   nearby,
   route = [],
+  disabled = false,
 }: {
   locations: ReturnType<typeof useRideLocations>;
   nearby: NearbyDriver[];
   route?: RouteResult["polyline"];
+  disabled?: boolean;
 }) {
   const intelligence = useMobilityIntelligence();
+  const gps = useDeviceLocation();
   const [heatmapEnabled, setHeatmapEnabled] = useState(false);
   const [viewingIntelligenceArea, setViewingIntelligenceArea] = useState(false);
+  const [gpsFocus, setGpsFocus] = useState<LatLng | null>(null);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const zones = intelligence.data?.zones ?? [];
   const selectedZone = zones.find((zone) => zone.zoneId === selectedZoneId) ?? null;
@@ -50,6 +55,17 @@ export function PassengerPickupMap({
       kind: "driver",
       label: `${driver.name} · ${formatMinutes(driver.etaMin)}`,
     }));
+    if (gps.position) {
+      list.push({
+        id: "passenger-current-location",
+        lat: gps.position.point.lat,
+        lng: gps.position.point.lng,
+        kind: "passenger",
+        accuracyMeters: gps.position.accuracy,
+        heading: gps.position.heading,
+        label: `Your location · ±${Math.round(gps.position.accuracy)} m`,
+      });
+    }
     if (locations.pickup) {
       list.push({
         id: "pickup",
@@ -69,7 +85,7 @@ export function PassengerPickupMap({
       });
     }
     return list;
-  }, [nearby, locations.pickup, locations.drop, locations.pickupAddress, locations.dropAddress]);
+  }, [nearby, locations.pickup, locations.drop, locations.pickupAddress, locations.dropAddress, gps.position]);
 
   const useSuggestion = (point: LatLng) => {
     locations.setLocationPoint("pickup", point);
@@ -83,8 +99,21 @@ export function PassengerPickupMap({
         subtitle="India-wide map · choose pickup or destination"
         action={
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <button
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={!gps.position}
+            onClick={() => {
+              if (!gps.position) return;
+              setGpsFocus({ ...gps.position.point });
+              setViewingIntelligenceArea(false);
+            }}
+          >
+            {gps.position ? `My location · ${gps.status === "WEAK" ? "Weak GPS" : "GPS live"}` : "Locating"}
+          </Button>
+          <button
               type="button"
+              disabled={disabled}
               onClick={() => setHeatmapEnabled((enabled) => !enabled)}
               aria-pressed={heatmapEnabled}
               className={`rounded-lg px-2.5 py-1.5 text-xs font-medium ${
@@ -98,6 +127,7 @@ export function PassengerPickupMap({
                 <button
                   key={field}
                   type="button"
+                  disabled={disabled}
                   onClick={() => locations.setActiveField(field)}
                   aria-pressed={locations.activeField === field}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
@@ -113,17 +143,18 @@ export function PassengerPickupMap({
           </div>
         }
       />
-      <div className="h-[380px] sm:h-[480px]">
+      <div className="h-[340px] sm:h-[480px]">
         <MapCanvas
-          center={viewingIntelligenceArea ? CITY.center : locations.pickup ?? INDIA_CENTER}
-          zoom={viewingIntelligenceArea ? 12 : locations.pickup ? 13 : 4}
+          center={viewingIntelligenceArea ? CITY.center : gpsFocus ?? locations.pickup ?? INDIA_CENTER}
+          zoom={viewingIntelligenceArea ? 12 : gpsFocus ? 14 : locations.pickup ? 13 : 4}
           markers={markers}
           route={route}
-          onMapClick={(point) => {
+          onMapClick={disabled ? undefined : (point) => {
+            setGpsFocus(null);
             setViewingIntelligenceArea(false);
             locations.handleMapClick(point);
           }}
-          recenter={locations.mapRecenter}
+          recenter={gpsFocus ?? locations.mapRecenter}
           zoneInsights={heatmapEnabled ? zones : []}
           selectedZoneId={selectedZoneId}
           onZoneSelect={(zone) => setSelectedZoneId(zone.zoneId)}
@@ -150,6 +181,7 @@ export function PassengerPickupMap({
             generatedAt={intelligence.data?.generatedAt}
             city={intelligence.data?.city ?? CITY.name}
             onUseSuggestion={useSuggestion}
+            disabled={disabled}
           />
         </div>
       ) : null}

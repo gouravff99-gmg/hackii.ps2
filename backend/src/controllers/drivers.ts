@@ -1,9 +1,9 @@
-import { DriverStatus } from "@ps02/shared";
+import { DemoScenario, DriverStatus, SOCKET_EVENTS, VehicleCategory } from "@ps02/shared";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentAuth } from "../middleware/auth";
-import { SOCKET_EVENTS } from "@ps02/shared";
 import * as driversService from "../services/drivers";
+import { getDriverAreaOpportunities } from "../services/areaDemand";
 import { getDriverDemandInsights } from "../services/zones";
 import { emitToAdmins } from "../services/realtime";
 import { ApiError } from "../utils/ApiError";
@@ -13,6 +13,7 @@ export const nearbyQuerySchema = z.object({
   lat: z.coerce.number().finite().min(-90).max(90),
   lng: z.coerce.number().finite().min(-180).max(180),
   radiusKm: z.coerce.number().finite().min(0.1).max(20).default(5),
+  category: z.nativeEnum(VehicleCategory).optional(),
 });
 
 export const statusSchema = z.object({
@@ -31,6 +32,22 @@ export const vehicleRegistrationSchema = z.object({
 
 export const driverIdParamSchema = z.object({ driverId: z.string().min(1).max(64) });
 
+const opportunityWindowIds = [
+  "LATE_NIGHT",
+  "MORNING_COMMUTE",
+  "MORNING_ACTIVITY",
+  "AFTERNOON",
+  "EVENING_TRANSITION",
+  "EVENING_PEAK",
+  "NIGHT",
+] as const;
+
+export const opportunitiesQuerySchema = z.object({
+  category: z.nativeEnum(VehicleCategory).optional(),
+  window: z.enum(opportunityWindowIds).optional(),
+  scenario: z.nativeEnum(DemoScenario).optional(),
+});
+
 function driverIdOf(req: Request): string {
   const auth = currentAuth(req);
   if (!auth.driverId) throw ApiError.forbidden("No driver profile on this account");
@@ -39,7 +56,12 @@ function driverIdOf(req: Request): string {
 
 export async function nearby(req: Request, res: Response) {
   const query = req.validated.query as z.infer<typeof nearbyQuerySchema>;
-  const drivers = await driversService.findNearbyDrivers(query.lat, query.lng, query.radiusKm);
+  const drivers = await driversService.findNearbyDrivers(
+    query.lat,
+    query.lng,
+    query.radiusKm,
+    query.category,
+  );
   res.json({ drivers });
 }
 
@@ -50,6 +72,17 @@ export async function me(req: Request, res: Response) {
 
 export async function demand(req: Request, res: Response) {
   res.json(await getDriverDemandInsights(driverIdOf(req)));
+}
+
+export async function opportunities(req: Request, res: Response) {
+  const query = req.validated.query as z.infer<typeof opportunitiesQuerySchema>;
+  res.json(
+    await getDriverAreaOpportunities(driverIdOf(req), {
+      category: query.category,
+      windowId: query.window,
+      scenario: query.scenario,
+    }),
+  );
 }
 
 export async function setStatus(req: Request, res: Response) {

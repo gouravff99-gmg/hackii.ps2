@@ -1,4 +1,5 @@
 import type { ChaosRequest, NearbyDriver, SimStatus } from "./types";
+import type { VehicleCategory } from "./enums";
 
 /** Every Socket.IO event name lives here. Backend and frontend import these. */
 export const SOCKET_EVENTS = {
@@ -68,6 +69,8 @@ export interface RideOfferPayload {
   expiresAt: string;
   timeoutMs: number;
   demoMode?: boolean;
+  /** Service category the passenger booked (BIKE / CAR / POOL). */
+  category?: VehicleCategory;
 }
 
 export interface RideReassignedPayload {

@@ -1,8 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { CircleMarker, Tooltip } from "react-leaflet";
+import { Circle, CircleMarker, Polyline, Tooltip } from "react-leaflet";
 
 interface AnimatedDriverMarkerProps {
-  marker: { lat: number; lng: number; label?: string };
+  marker: {
+    lat: number;
+    lng: number;
+    label?: string;
+    kind?: string;
+    accuracyMeters?: number;
+    heading?: number | null;
+  };
 }
 
 export function AnimatedDriverMarker({ marker }: AnimatedDriverMarkerProps) {
@@ -29,14 +36,45 @@ export function AnimatedDriverMarker({ marker }: AnimatedDriverMarkerProps) {
     return () => cancelAnimationFrame(frame);
   }, [marker.lat, marker.lng]);
 
+  const passenger = marker.kind === "passenger";
+  const headingEnd =
+    passenger && marker.heading !== null && marker.heading !== undefined
+      ? (() => {
+          const radians = (marker.heading * Math.PI) / 180;
+          const distance = 0.00025;
+          return [
+            position[0] + Math.cos(radians) * distance,
+            position[1] +
+              (Math.sin(radians) * distance) /
+                Math.max(0.2, Math.cos((position[0] * Math.PI) / 180)),
+          ] as [number, number];
+        })()
+      : null;
+
   return (
-    <CircleMarker center={position} radius={5} pathOptions={{
-      color: "#2049e3",
-      fillColor: "#3566f6",
-      fillOpacity: 0.9,
-      weight: 2,
-    }}>
-      {marker.label ? <Tooltip direction="top" offset={[0, -6]} opacity={1}>{marker.label}</Tooltip> : null}
-    </CircleMarker>
+    <>
+      {passenger && marker.accuracyMeters ? (
+        <Circle
+          center={position}
+          radius={Math.min(marker.accuracyMeters, 500)}
+          pathOptions={{ color: "#2563eb", fillColor: "#60a5fa", fillOpacity: 0.1, weight: 1 }}
+        />
+      ) : null}
+      {headingEnd ? (
+        <Polyline positions={[position, headingEnd]} pathOptions={{ color: "#1d4ed8", weight: 3, opacity: 0.9 }} />
+      ) : null}
+      <CircleMarker
+        center={position}
+        radius={passenger ? 8 : 5}
+        pathOptions={{
+          color: passenger ? "#ffffff" : "#2049e3",
+          fillColor: passenger ? "#2563eb" : "#3566f6",
+          fillOpacity: 0.98,
+          weight: passenger ? 3 : 2,
+        }}
+      >
+        {marker.label ? <Tooltip direction="top" offset={[0, -6]} opacity={1}>{marker.label}</Tooltip> : null}
+      </CircleMarker>
+    </>
   );
 }

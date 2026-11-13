@@ -18,6 +18,8 @@ interface RideLocationPickerProps {
   route?: RouteResult["polyline"];
   onReset?: () => void;
   bookingPanel?: ReactNode;
+  nearbyError?: string | null;
+  disabled?: boolean;
 }
 
 export function RideLocationPicker({
@@ -26,20 +28,28 @@ export function RideLocationPicker({
   route = [],
   onReset,
   bookingPanel,
+  nearbyError = null,
+  disabled = false,
 }: RideLocationPickerProps) {
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-      <PassengerPickupMap locations={locations} nearby={nearby} route={route} />
+      <PassengerPickupMap locations={locations} nearby={nearby} route={route} disabled={disabled} />
 
       <Card>
         <CardHeader title="Trip locations" subtitle="Search an address or select a point on the map" />
         <CardBody className="flex flex-col gap-4">
+          {nearbyError ? (
+            <p role="status" className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Nearby driver information is temporarily unavailable: {nearbyError}
+            </p>
+          ) : null}
           <div>
             <PlaceSearch
               label="Search pickup"
               value={locations.pickupAddress}
               onSelect={(place) => locations.selectPlace("pickup", place)}
               onQueryChange={() => locations.clearLocation("pickup")}
+              disabled={disabled}
             />
             <SelectedLocation
               point={locations.pickup}
@@ -50,8 +60,9 @@ export function RideLocationPicker({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
                 type="button"
+                disabled={disabled}
                 onClick={locations.useCurrentLocation}
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Icon name="navigation" size={13} />
                 Use my current location
@@ -65,6 +76,7 @@ export function RideLocationPicker({
               value={locations.dropAddress}
               onSelect={(place) => locations.selectPlace("drop", place)}
               onQueryChange={() => locations.clearLocation("drop")}
+              disabled={disabled}
             />
             <SelectedLocation
               point={locations.drop}
@@ -82,6 +94,7 @@ export function RideLocationPicker({
               <Input
                 label="Pickup coordinates"
                 value={locations.pickupText}
+                disabled={disabled}
                 onChange={(event) => locations.setCoordinateText("pickup", event.target.value)}
                 onBlur={() => {
                   if (locations.pickup) locations.resolveAddress("pickup", locations.pickup);
@@ -92,6 +105,7 @@ export function RideLocationPicker({
               <Input
                 label="Destination coordinates"
                 value={locations.dropText}
+                disabled={disabled}
                 onChange={(event) => locations.setCoordinateText("drop", event.target.value)}
                 onBlur={() => {
                   if (locations.drop) locations.resolveAddress("drop", locations.drop);
@@ -106,12 +120,14 @@ export function RideLocationPicker({
             <Button
               variant="secondary"
               size="sm"
+              disabled={disabled}
               onClick={locations.centerPickup}
             >
               Centre pickup
             </Button>
             <Button
               variant="ghost"
+              disabled={disabled}
               size="sm"
               onClick={() => {
                 locations.reset();

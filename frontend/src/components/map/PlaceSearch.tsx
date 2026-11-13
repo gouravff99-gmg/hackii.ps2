@@ -10,9 +10,10 @@ interface PlaceSearchProps {
   value: string;
   onSelect: (place: PlaceSuggestion) => void;
   onQueryChange?: () => void;
+  disabled?: boolean;
 }
 
-export function PlaceSearch({ label, value, onSelect, onQueryChange }: PlaceSearchProps) {
+export function PlaceSearch({ label, value, onSelect, onQueryChange, disabled = false }: PlaceSearchProps) {
   const [query, setQuery] = useState(value);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
@@ -63,6 +64,7 @@ export function PlaceSearch({ label, value, onSelect, onQueryChange }: PlaceSear
       <Input
         label={label}
         value={query}
+        disabled={disabled}
         onChange={(event) => {
           searchEnabled.current = true;
           setQuery(event.target.value);
@@ -96,13 +98,14 @@ export function PlaceSearch({ label, value, onSelect, onQueryChange }: PlaceSear
             <li key={place.placeId} role="option" aria-selected={false}>
               <button
                 type="button"
+                disabled={disabled}
                 onClick={() => {
                   searchEnabled.current = false;
                   setSuggestions([]);
                   setQuery(place.displayName);
                   onSelect(place);
                 }}
-                className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50"
+                className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink-700 hover:bg-ink-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {place.displayName}
               </button>

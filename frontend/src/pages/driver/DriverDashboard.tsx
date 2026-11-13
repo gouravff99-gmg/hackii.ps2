@@ -13,29 +13,27 @@ import { useAsync } from "../../hooks/useAsync";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import { useToast } from "../../hooks/useToast";
 import { useDriverOffer } from "../../hooks/useDriverOffer";
+import { useDriverLiveTracking } from "../../hooks/useDriverLiveTracking";
 import { driverApi } from "../../services/driverApi";
 import { rideApi } from "../../services/rideApi";
 import { errorMessage } from "../../services/api";
 import { clearOffer } from "../../features/driver/offerStore";
 import { PageHeader } from "../../components/ui/PageHeader";
-import { Card, CardBody, CardHeader } from "../../components/ui/Card";
-import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
-import { StatCard } from "../../components/ui/StatCard";
-import { Toggle } from "../../components/ui/Toggle";
 import { Spinner } from "../../components/ui/Spinner";
-import { ErrorState, EmptyState } from "../../components/ui/EmptyState";
-import { MapCanvas, type MapMarker } from "../../components/map/MapCanvas";
+import { ErrorState } from "../../components/ui/EmptyState";
+import type { MapMarker } from "../../components/map/MapCanvas";
 import { DriverOpportunityMap } from "../../components/map/DriverOpportunityMap";
 import { OfferCard } from "../../components/rides/OfferCard";
-import { RideStatusStepper } from "../../components/rides/RideStatusStepper";
+import {
+  DriverAvailabilityCard,
+  DriverCurrentRideCard,
+  DriverStatsCards,
+} from "../../components/driver/DriverDashboardCards";
+import { DriverPositionMap } from "../../components/driver/DriverPositionMap";
 import {
   driverStatusLabel,
   driverStatusTone,
-  formatCurrency,
-  formatKm,
-  formatMinutes,
-  formatPercent,
 } from "../../utils/format";
 
 const COMMISSION_RATE = 0.2;
@@ -49,12 +47,7 @@ interface DriverDashboardData {
 function isToday(iso?: string | null): boolean {
   if (!iso) return false;
   const date = new Date(iso);
-  const now = new Date();
-  return (
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-  );
+  return date.toDateString() === new Date().toDateString();
 }
 
 export function DriverDashboard() {
@@ -63,6 +56,8 @@ export function DriverDashboard() {
   const [busy, setBusy] = useState(false);
   const [responding, setResponding] = useState(false);
   const [advancing, setAdvancing] = useState(false);
+  const [recenterPoint, setRecenterPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapCenter, setMapCenter] = useState({ lat: 12.9716, lng: 77.5946 });
 
   const { data, loading, error, reload } = useAsync<DriverDashboardData>(async () => {
     const [profile, active, history] = await Promise.all([
@@ -84,42 +79,28 @@ export function DriverDashboard() {
   const driver = data?.driver ?? null;
   const isOnline = driver ? driver.status !== DriverStatus.OFFLINE : false;
   const isBusy = driver?.status === DriverStatus.BUSY;
-  const lastGpsSent = useRef<{ at: number; lat: number; lng: number } | null>(null);
+  const live = useDriverLiveTracking({
+    driverId: driver?.id,
+    fallbackPosition: driver ? { lat: driver.lat, lng: driver.lng } : null,
+    activeRide: data?.active ?? null,
+    isOnline,
+    toast,
+  });
+  const { gps, socketConnected, activeRoute, routeError } = live;
+  const centeredOnGps = useRef(false);
 
   useEffect(() => {
-    if (!isOnline || !navigator.geolocation) return;
-    let active = true;
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        if (!active) return;
-        const { latitude: lat, longitude: lng } = position.coords;
-        const previous = lastGpsSent.current;
-        const movedKm = previous
-          ? Math.hypot(
-              (lat - previous.lat) * 110.574,
-              (lng - previous.lng) * 111.32 * Math.cos((lat * Math.PI) / 180),
-            )
-          : Number.POSITIVE_INFINITY;
-        if (previous && Date.now() - previous.at < 5000 && movedKm < 0.05) return;
-        lastGpsSent.current = { at: Date.now(), lat, lng };
-        void driverApi.updateLocation(lat, lng).catch((error: unknown) => {
-          toast.push("error", "Live location update failed", errorMessage(error));
-        });
-      },
-      () =>
-        toast.push(
-          "warning",
-          "GPS unavailable",
-          "Enable location access to share your live position during rides.",
-        ),
-      { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 },
-    );
-    return () => {
-      active = false;
-      navigator.geolocation.clearWatch(watchId);
-      lastGpsSent.current = null;
-    };
-  }, [isOnline, toast]);
+    const point = gps.position?.point;
+    if (!point || centeredOnGps.current) return;
+    centeredOnGps.current = true;
+    setMapCenter(point);
+  }, [gps.position?.point.lat, gps.position?.point.lng]);
+
+  useEffect(() => {
+    if (driver && !centeredOnGps.current) {
+      setMapCenter({ lat: driver.lat, lng: driver.lng });
+    }
+  }, [driver?.id, driver?.lat, driver?.lng]);
 
   const todayCompleted = (data?.history ?? []).filter(
     (ride) => ride.status === RideStatus.COMPLETED && isToday(ride.completedAt),
@@ -194,13 +175,21 @@ export function DriverDashboard() {
   };
 
   const useCurrentLocation = () => {
+    if (gps.position) {
+      setRecenterPoint({ ...gps.position.point });
+      return;
+    }
     if (!navigator.geolocation) {
-      toast.push("warning", "Location unavailable", "Tap the map to set your position instead.");
+      toast.push("warning", "Location unavailable", "Tap the map to set a fallback position.");
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (position) => void setLocation(position.coords.latitude, position.coords.longitude),
-      () => toast.push("warning", "Could not read your location", "Tap the map to set your position."),
+      (position) => {
+        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
+        setMapCenter(point);
+        setRecenterPoint(point);
+      },
+      () => toast.push("warning", "Could not read your location", "Tap the map to set a fallback position."),
       { enableHighAccuracy: true, timeout: 8000 },
     );
   };
@@ -210,10 +199,10 @@ export function DriverDashboard() {
     const list: MapMarker[] = [
       {
         id: "me",
-        lat: driver.lat,
-        lng: driver.lng,
+        lat: gps.position?.point.lat ?? driver.lat,
+        lng: gps.position?.point.lng ?? driver.lng,
         kind: "driver" as const,
-        label: `${driver.name} · ${driverStatusLabel(driver.status)}`,
+        label: `${driver.name} · ${gps.position ? `GPS ±${Math.round(gps.position.accuracy)}m` : driverStatusLabel(driver.status)}`,
       },
     ];
     if (data?.active) {
@@ -235,7 +224,7 @@ export function DriverDashboard() {
       );
     }
     return list;
-  }, [driver, data?.active]);
+  }, [driver, data?.active, gps.position?.point.lat, gps.position?.point.lng, gps.position?.accuracy]);
 
   if (loading) {
     return (
@@ -263,175 +252,49 @@ export function DriverDashboard() {
 
       {offer ? <OfferCard offer={offer} onRespond={respond} busy={responding} /> : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Trips today"
-          value={driver.completedToday}
-          hint="Completed rides"
-          icon="check"
-          tone="success"
-        />
-        <StatCard
-          label="Earnings today"
-          value={formatCurrency(todayEarnings, 0)}
-          hint={`After ${Math.round(COMMISSION_RATE * 100)}% commission`}
-          icon="wallet"
-          tone="brand"
-        />
-        <StatCard
-          label="Acceptance"
-          value={formatPercent(driver.acceptanceRate)}
-          hint="Rolling acceptance rate"
-          icon="activity"
-          tone="violet"
-        />
-        <StatCard
-          label="Busy minutes"
-          value={Math.round(driver.busyMinutesToday)}
-          hint="Today"
-          icon="clock"
-          tone="warning"
-        />
-      </div>
+      <DriverStatsCards driver={driver} todayEarnings={todayEarnings} commissionRate={COMMISSION_RATE} />
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
-        <Card>
-          <CardHeader title="Availability" subtitle="Only available drivers receive offers." />
-          <CardBody className="flex flex-col gap-4">
-            <Toggle
-              checked={isOnline}
-              onChange={(next) => void toggleOnline(next)}
-              label="Online"
-              description={
-                isBusy
-                  ? "Finish the current ride before going offline."
-                  : isOnline
-                    ? "You are visible to passengers nearby."
-                    : "Go online to start receiving ride offers."
-              }
-              disabled={busy || isBusy}
-            />
-            <div className="rounded-xl bg-ink-50 px-4 py-3 text-xs text-ink-500">
-              Vehicle: <span className="font-medium text-ink-700">{driver.vehicleType}</span> · Acceptance
-              rate adjusts automatically as you accept or reject offers.
-            </div>
-            {data?.active ? (
-              <div className="flex gap-2">
-                <Button
-                  fullWidth
-                  variant="secondary"
-                  onClick={() => void rideApi.driverCancel(data.active!.id).then(reload).catch((err) => toast.push("error", "Could not cancel", errorMessage(err)))}
-                >
-                  Cancel current ride
-                </Button>
-              </div>
-            ) : null}
-          </CardBody>
-        </Card>
-
-        <Card className="overflow-hidden">
-          <CardHeader
-            title="Your position"
-            subtitle="Tap the map to update, or use your device location."
-            action={
-              <Button size="sm" variant="secondary" onClick={useCurrentLocation}>
-                Use my location
-              </Button>
-            }
-          />
-          <div className="h-[280px]">
-            <MapCanvas
-              center={{ lat: driver.lat, lng: driver.lng }}
-              zoom={13}
-              markers={markers}
-              onMapClick={(point) => void setLocation(point.lat, point.lng)}
-            />
-          </div>
-        </Card>
+        <DriverAvailabilityCard
+          driver={driver}
+          isOnline={isOnline}
+          isBusy={Boolean(isBusy)}
+          busy={busy}
+          hasActiveRide={Boolean(data?.active)}
+          onToggleOnline={(next) => void toggleOnline(next)}
+          onCancelRide={() => {
+            if (!data?.active) return;
+            void rideApi.driverCancel(data.active.id)
+              .then(() => reload())
+              .catch((err: unknown) => toast.push("error", "Could not cancel", errorMessage(err)));
+          }}
+        />
+        <DriverPositionMap
+          position={gps.position}
+          status={gps.status}
+          socketConnected={socketConnected}
+          isOnline={isOnline}
+          center={mapCenter}
+          recenter={recenterPoint}
+          markers={markers}
+          route={activeRoute?.polyline}
+          routeError={routeError}
+          onRecenter={useCurrentLocation}
+          onMapClick={(point) => void setLocation(point.lat, point.lng)}
+        />
       </div>
 
-      <DriverOpportunityMap location={{ lat: driver.lat, lng: driver.lng }} />
+      <DriverOpportunityMap
+        location={{ lat: driver.lat, lng: driver.lng }}
+        category={driver.vehicleCategory}
+      />
 
-      <Card>
-        <CardHeader
-          title="Current ride"
-          subtitle={data?.active ? "Passenger details and trip stages" : "No ride assigned"}
-        />
-        <CardBody>
-          {data?.active ? (
-            <div className="flex flex-col gap-4">
-              <RideStatusStepper status={data.active.status} />
-              <div className="grid gap-3 text-sm sm:grid-cols-3">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Passenger</p>
-                  <p className="mt-0.5 font-medium text-ink-900">{data.active.passenger.name}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Distance</p>
-                  <p className="mt-0.5 font-medium text-ink-900">{formatKm(data.active.distanceKm)}</p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Fare estimate</p>
-                  <p className="mt-0.5 font-medium text-ink-900">
-                    {formatCurrency(data.active.fareEstimate, 0)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Pickup</p>
-                  <p className="mt-0.5 font-medium text-ink-900">
-                    {data.active.pickupLat.toFixed(4)}, {data.active.pickupLng.toFixed(4)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Destination</p>
-                  <p className="mt-0.5 font-medium text-ink-900">
-                    {data.active.dropLat.toFixed(4)}, {data.active.dropLng.toFixed(4)}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-ink-400">Promised ETA</p>
-                  <p className="mt-0.5 font-medium text-ink-900">
-                    {formatMinutes(data.active.promisedEtaMin)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {data.active.status === RideStatus.ACCEPTED ? (
-                  <Button loading={advancing} onClick={() => void advance("ARRIVING")}>
-                    Start driving to pickup
-                  </Button>
-                ) : null}
-                {data.active.status === RideStatus.ARRIVING ? (
-                  <Button loading={advancing} onClick={() => void advance("ARRIVED")}>
-                    I have arrived
-                  </Button>
-                ) : null}
-                {data.active.status === RideStatus.ARRIVED ? (
-                  <Button loading={advancing} onClick={() => void advance("ONGOING")}>
-                    Start trip
-                  </Button>
-                ) : null}
-                {data.active.status === RideStatus.ONGOING ? (
-                  <Button loading={advancing} onClick={() => void advance("COMPLETED")}>
-                    Complete trip
-                  </Button>
-                ) : null}
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              icon="car"
-              title="Waiting for a ride"
-              description={
-                isOnline
-                  ? "Stay online. Incoming offers appear here and on the Ride requests page."
-                  : "Go online to start receiving ride offers."
-              }
-            />
-          )}
-        </CardBody>
-      </Card>
+      <DriverCurrentRideCard
+        ride={data?.active ?? null}
+        isOnline={isOnline}
+        advancing={advancing}
+        onAdvance={(next) => void advance(next)}
+      />
     </div>
   );
 }

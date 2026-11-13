@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
-  CITY,
   RideStatus,
   SOCKET_EVENTS,
   type NotificationPayload,
@@ -11,21 +10,22 @@ import {
 } from "@ps02/shared";
 import { useAuth } from "../../hooks/useAuth";
 import { useAsync } from "../../hooks/useAsync";
+import { useNearbyDrivers } from "../../hooks/useNearbyDrivers";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import { useToast } from "../../hooks/useToast";
-import { driverApi } from "../../services/driverApi";
 import { rideApi } from "../../services/rideApi";
 import { Card, CardBody, CardHeader } from "../../components/ui/Card";
-import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
 import { Spinner } from "../../components/ui/Spinner";
 import { ErrorState, EmptyState } from "../../components/ui/EmptyState";
 import { PageHeader } from "../../components/ui/PageHeader";
 import { StatCard } from "../../components/ui/StatCard";
-import { MapCanvas, type MapMarker } from "../../components/map/MapCanvas";
+import type { MapMarker } from "../../components/map/MapCanvas";
+import { PassengerLocationMap } from "../../components/map/PassengerLocationMap";
 import { RideStatusStepper } from "../../components/rides/RideStatusStepper";
 import { formatCurrency, formatKm, formatMinutes, rideStatusLabel } from "../../utils/format";
 import { Icon } from "../../components/ui/Icon";
+import { useDeviceLocation } from "../../hooks/useDeviceLocation";
 
 const ACTIVE_STATUSES: RideStatus[] = [
   RideStatus.REQUESTED,
@@ -36,25 +36,18 @@ const ACTIVE_STATUSES: RideStatus[] = [
   RideStatus.REASSIGNING,
 ];
 
-interface PassengerHomeData {
-  rides: Ride[];
-  nearby: NearbyDriver[];
-}
-
 export function PassengerHome() {
   const { user } = useAuth();
   const toast = useToast();
+  const gps = useDeviceLocation();
+  const point = gps.position?.point ?? null;
+  const locationKey = point ? `${point.lat.toFixed(3)},${point.lng.toFixed(3)}` : "";
 
-  const { data, loading, error, reload } = useAsync<PassengerHomeData>(async () => {
-    const [history, nearby] = await Promise.all([
-      rideApi.history(),
-      driverApi.nearby(CITY.center.lat, CITY.center.lng, 10).catch(() => ({ drivers: [] })),
-    ]);
-    return { rides: history.rides, nearby: nearby.drivers };
-  }, []);
+  const ridesState = useAsync(() => rideApi.history(), []);
+  const nearbyState = useNearbyDrivers(point, locationKey);
 
   useSocketEvent<RideStatusPayload>(SOCKET_EVENTS.RIDE_STATUS, () => {
-    void reload();
+    void ridesState.reload();
   });
 
   useSocketEvent<NotificationPayload>(SOCKET_EVENTS.NOTIFICATION, (payload) => {
@@ -64,16 +57,17 @@ export function PassengerHome() {
     });
   });
 
+  const rides = ridesState.data?.rides ?? [];
   const activeRide = useMemo(
-    () => data?.rides.find((ride) => ACTIVE_STATUSES.includes(ride.status)) ?? null,
-    [data],
+    () => rides.find((ride) => ACTIVE_STATUSES.includes(ride.status)) ?? null,
+    [rides],
   );
 
-  const completed = data?.rides.filter((ride) => ride.status === RideStatus.COMPLETED) ?? [];
+  const completed = rides.filter((ride) => ride.status === RideStatus.COMPLETED);
   const totalSpent = completed.reduce((sum, ride) => sum + (ride.fareFinal ?? ride.fareEstimate), 0);
 
   const markers: MapMarker[] = [
-    ...(data?.nearby ?? []).map((driver) => ({
+    ...nearbyState.drivers.map((driver) => ({
       id: driver.id,
       lat: driver.lat,
       lng: driver.lng,
@@ -133,24 +127,15 @@ export function PassengerHome() {
         />
         <StatCard
           label="Drivers nearby"
-          value={data?.nearby.length ?? 0}
-          hint="Within 10 km of the city centre"
+          value={point ? nearbyState.drivers.length : "—"}
+          hint="Within 10 km of your location"
           icon="car"
           tone="violet"
         />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card className="overflow-hidden">
-          <CardHeader
-            title="Around you"
-            subtitle={`${CITY.name} · available drivers shown live`}
-            action={<Badge tone="success" dot>Available</Badge>}
-          />
-          <div className="h-[380px] sm:h-[440px]">
-            <MapCanvas center={CITY.center} zoom={12} markers={markers} />
-          </div>
-        </Card>
+        <PassengerLocationMap position={gps.position} status={gps.status} markers={markers} />
 
         <div className="flex flex-col gap-5">
           <Card>
@@ -163,12 +148,12 @@ export function PassengerHome() {
               }
             />
             <CardBody>
-              {loading ? (
+              {ridesState.loading ? (
                 <div className="flex items-center justify-center py-8 text-ink-400">
                   <Spinner className="h-6 w-6" />
                 </div>
-              ) : error ? (
-                <ErrorState message={error} onRetry={() => void reload()} />
+              ) : ridesState.error ? (
+                <ErrorState message={ridesState.error} onRetry={() => void ridesState.reload()} />
               ) : activeRide ? (
                 <div className="flex flex-col gap-4">
                   <RideStatusStepper status={activeRide.status} />
@@ -225,14 +210,19 @@ export function PassengerHome() {
           </Card>
 
           <Card>
-            <CardHeader title="Nearby drivers" subtitle="Sorted by pickup ETA" />
-            <CardBody className={data?.nearby.length ? "divide-y divide-ink-100 py-0" : ""}>
-              {loading ? (
+            <CardHeader title="Nearby drivers" subtitle="Sorted by distance from your GPS location" />
+            <CardBody className={nearbyState.drivers.length ? "divide-y divide-ink-100 py-0" : ""}>
+              {nearbyState.error ? (
+                <p role="status" className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Nearby drivers could not be loaded: {nearbyState.error}
+                </p>
+              ) : null}
+              {nearbyState.loading ? (
                 <div className="flex items-center justify-center py-6 text-ink-400">
                   <Spinner className="h-5 w-5" />
                 </div>
-              ) : data && data.nearby.length > 0 ? (
-                data.nearby.slice(0, 5).map((driver) => (
+              ) : point && nearbyState.drivers.length > 0 ? (
+                nearbyState.drivers.slice(0, 5).map((driver) => (
                   <div key={driver.id} className="flex items-center justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium text-ink-900">{driver.name}</p>
@@ -246,8 +236,8 @@ export function PassengerHome() {
               ) : (
                 <EmptyState
                   icon="car"
-                  title="No drivers available right now"
-                  description="Drivers appear here as soon as they go online."
+                  title={point ? "No drivers available nearby" : "Location needed to find nearby drivers"}
+                  description={point ? "Drivers appear here as soon as they go online near you." : "Allow location access to find drivers near your actual position."}
                 />
               )}
             </CardBody>

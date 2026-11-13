@@ -7,6 +7,7 @@ import type {
   RideStatus,
   Role,
   Strategy,
+  VehicleCategory,
   VehicleType,
 } from "./enums";
 
@@ -47,6 +48,10 @@ export interface Driver {
   id: string;
   userId: string;
   vehicleType: VehicleType | string;
+  /** Service category (BIKE / CAR / POOL). Defaults to CAR for legacy rows. */
+  vehicleCategory?: VehicleCategory;
+  poolEnabled?: boolean;
+  seatCapacity?: number;
   status: DriverStatus;
   lat: number;
   lng: number;
@@ -102,6 +107,8 @@ export interface Ride {
   dropLat: number;
   dropLng: number;
   status: RideStatus;
+  /** Passenger-facing service category. Defaults to CAR for legacy rows. */
+  category?: VehicleCategory;
   distanceKm: number;
   etaMin: number;
   fareEstimate: number;
@@ -155,12 +162,15 @@ export interface EstimateResponse {
   surge: number;
   polyline: LatLng[];
   source: "osrm" | "haversine";
+  /** Service category the estimate was calculated for. */
+  category?: VehicleCategory;
 }
 
 export interface NearbyDriver {
   id: string;
   name: string;
   vehicleType: string;
+  vehicleCategory?: VehicleCategory;
   lat: number;
   lng: number;
   distanceKm: number;

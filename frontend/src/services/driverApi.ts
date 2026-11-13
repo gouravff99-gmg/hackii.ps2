@@ -1,5 +1,6 @@
 import type {
   DriverAdminView,
+  DriverAreaOpportunitiesResponse,
   DriverDemandInsightsResponse,
   DriverDocumentType,
   DriverOnboardingApplication,
@@ -8,16 +9,27 @@ import type {
 import { api } from "./api";
 
 export const driverApi = {
-  nearby(lat: number, lng: number, radiusKm = 5) {
-    return api.get<NearbyDriversResponse>(
-      `/drivers/nearby?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}`,
-    );
+  nearby(lat: number, lng: number, radiusKm = 5, category?: string, signal?: AbortSignal) {
+    const params = new URLSearchParams({
+      lat: String(lat),
+      lng: String(lng),
+      radiusKm: String(radiusKm),
+    });
+    if (category) params.set("category", category);
+    return api.get<NearbyDriversResponse>(`/drivers/nearby?${params.toString()}`, { signal });
   },
   me() {
     return api.get<{ driver: DriverAdminView }>("/drivers/me");
   },
   demand() {
     return api.get<DriverDemandInsightsResponse>("/drivers/demand");
+  },
+  opportunities(category?: string, window?: string) {
+    const params = new URLSearchParams();
+    if (category) params.set("category", category);
+    if (window) params.set("window", window);
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    return api.get<DriverAreaOpportunitiesResponse>(`/drivers/opportunities${suffix}`);
   },
   setStatus(status: string) {
     return api.post<{ driver: DriverAdminView }>("/drivers/status", { status });

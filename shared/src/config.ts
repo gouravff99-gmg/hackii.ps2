@@ -34,6 +34,16 @@ export const FARE = {
   minFare: 60,
 } as const;
 
+/**
+ * Service-category fare cards. CAR reuses the existing FARE card so legacy
+ * behaviour is unchanged. POOL applies `POOL.fareDiscount` after the car fare.
+ */
+export const FARE_BY_CATEGORY = {
+  BIKE: { base: 20, perKm: 6.5, perMin: 0.8, minFare: 25 },
+  CAR: FARE,
+  POOL: FARE,
+} as const;
+
 export const SIM = {
   speed: 8,
   numDrivers: 25,

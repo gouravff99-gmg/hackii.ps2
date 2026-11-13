@@ -4,6 +4,7 @@ import {
   SOCKET_EVENTS,
   Strategy,
   TIMEOUTS,
+  VehicleCategory,
   type RideOfferPayload,
 } from "@ps02/shared";
 import { env } from "../config/env";
@@ -99,6 +100,7 @@ export async function getDriverOffer(driverId: string): Promise<RideOfferPayload
     expiresAt: new Date(offer.expiresAt).toISOString(),
     timeoutMs,
     demoMode: env.demoMode,
+    category: ride.category as unknown as VehicleCategory,
   };
 }
 
@@ -129,6 +131,7 @@ export async function dispatchRide(
       : await allocateDriver({
         pickup,
         strategy,
+        category: ride.category as unknown as VehicleCategory,
         excludeDriverIds: [...attempt.excluded],
         includeSimulated: ride.simRunId === "simulator",
       });
@@ -208,6 +211,7 @@ export async function dispatchRide(
     expiresAt: new Date(expiresAt).toISOString(),
     timeoutMs,
     demoMode: env.demoMode,
+    category: ride.category as unknown as VehicleCategory,
   };
 
   const timeout = setTimeout(() => {

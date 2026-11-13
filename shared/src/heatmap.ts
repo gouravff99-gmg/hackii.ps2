@@ -1,4 +1,5 @@
 import type { ZoneAvailability } from "./types";
+import type { DemandLevel } from "./enums";
 
 export const HEATMAP_THRESHOLDS = {
   intensity: [0.2, 0.4, 0.6, 0.8, 0.9] as const,
@@ -24,6 +25,36 @@ export const HEATMAP_COLORS = {
   noData: "#94A3B8",
   neutral: "#64748B",
 } as const;
+
+/* ------------------------------------------------------------------ */
+/* Area-wise layer colours (Belagavi operational zones)                */
+/* ------------------------------------------------------------------ */
+
+/** Admin demand layer: blue → cyan → green → yellow → orange → red. */
+export const AREA_DEMAND_COLORS = {
+  VERY_LOW: "#2563EB",
+  LOW: "#06B6D4",
+  MODERATE: "#22C55E",
+  HIGH: "#FACC15",
+  VERY_HIGH: "#F97316",
+  CRITICAL: "#EF4444",
+} satisfies Record<DemandLevel, string>;
+
+export function areaDemandColor(level: DemandLevel): string {
+  return AREA_DEMAND_COLORS[level] ?? HEATMAP_COLORS.noData;
+}
+
+/** Driver opportunity layer: blue → cyan → green → orange → red. */
+export const AREA_OPPORTUNITY_COLORS = ["#2563EB", "#06B6D4", "#22C55E", "#F97316", "#EF4444"] as const;
+
+export function areaOpportunityColor(score: number | null): string {
+  if (score === null || !Number.isFinite(score)) return HEATMAP_COLORS.noData;
+  if (score < 20) return AREA_OPPORTUNITY_COLORS[0];
+  if (score < 40) return AREA_OPPORTUNITY_COLORS[1];
+  if (score < 60) return AREA_OPPORTUNITY_COLORS[2];
+  if (score < 80) return AREA_OPPORTUNITY_COLORS[3];
+  return AREA_OPPORTUNITY_COLORS[4];
+}
 
 function colorAt(value: number, thresholds: readonly number[], colors: readonly string[]): string {
   if (!Number.isFinite(value)) return HEATMAP_COLORS.noData;

@@ -12,3 +12,9 @@ intelligenceRouter.get(
   validate({ query: controller.zoneQuerySchema }),
   asyncHandler(controller.zones),
 );
+
+intelligenceRouter.get(
+  "/areas",
+  validate({ query: controller.areasQuerySchema }),
+  asyncHandler(controller.areas),
+);

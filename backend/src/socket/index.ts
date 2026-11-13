@@ -9,6 +9,7 @@ import * as driversService from "../services/drivers";
 import { respondToOffer } from "../services/dispatch";
 import { emitToAdmins, setRealtimeServer } from "../services/realtime";
 import { publishDriverLocation } from "../services/driverTracking";
+import { ApiError } from "../utils/ApiError";
 
 const locationSchema = z.object({
   lat: z.number().finite().min(-90).max(90),
@@ -73,9 +74,13 @@ export function attachSocket(server: http.Server) {
     socket.on(
       SOCKET_EVENTS.DRIVER_UPDATE_LOCATION,
       authorize(async (payload) => {
-        if (!auth.driverId) return;
+        if (auth.role !== Role.DRIVER || !auth.driverId) {
+          throw ApiError.forbidden("Only authenticated drivers can update driver location");
+        }
         const parsed = locationSchema.safeParse(payload);
-        if (!parsed.success) return;
+        if (!parsed.success) {
+          throw ApiError.badRequest("Invalid driver location", parsed.error.flatten());
+        }
         const driver = await driversService.updateDriverLocation(
           auth.driverId,
           parsed.data.lat,

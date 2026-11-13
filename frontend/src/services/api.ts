@@ -97,8 +97,9 @@ async function download(path: string): Promise<Blob> {
 export const api = {
   get: <T>(path: string, options?: Pick<RequestInit, "signal">) =>
     request<T>(path, options),
-  post: <T>(path: string, body?: unknown) =>
+  post: <T>(path: string, body?: unknown, options?: Pick<RequestInit, "signal">) =>
     request<T>(path, {
+      ...options,
       method: "POST",
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
