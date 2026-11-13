@@ -1,0 +1,36 @@
+{
+  "name": "ps02-ride-hailing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PS02 - Intelligent Ride Matching and Dynamic Driver Allocation System",
+  "workspaces": [
+    "shared",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w apps/api",
+    "dev:web": "npm run dev -w apps/web",
+    "build": "npm run build -w shared && npm run build -w apps/api && npm run build -w apps/web",
+    "typecheck": "npm run typecheck -w shared && npm run typecheck -w apps/api && npm run typecheck -w apps/web",
+    "test": "npm run test -w apps/api",
+    "test:watch": "npm run test:watch -w apps/api",
+    "prisma:generate": "prisma generate --schema apps/api/prisma/schema.prisma",
+    "migrate": "prisma migrate dev --schema apps/api/prisma/schema.prisma",
+    "db:push": "prisma db push --schema apps/api/prisma/schema.prisma",
+    "seed": "tsx apps/api/prisma/seed.ts"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/client@5.22.0": true,
+    "@prisma/engines@5.22.0": true,
+    "esbuild@0.28.2": true,
+    "esbuild@0.21.5": true,
+    "prisma@5.22.0": true
+  }
+}
