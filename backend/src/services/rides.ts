@@ -6,10 +6,11 @@ import {
   type RideStatusPayload,
 } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
+import { env } from "../config/env";
 import { ApiError } from "../utils/ApiError";
 import { computeFare } from "./fare";
 import { getRoute } from "./osrm";
-import { pointInBounds } from "./geo";
+import { validateRidePoints } from "./bookingValidation";
 import { surgeForPickup } from "./zones";
 import { appendRideEvent, transitionRide } from "./rideStateMachine";
 import { clearDispatchState, dispatchRide } from "./dispatch";
@@ -28,22 +29,23 @@ export interface RidePlaceInput {
   drop: LatLng;
 }
 
-function assertInServiceArea(point: LatLng, label: string) {
-  if (!pointInBounds(point.lat, point.lng)) {
-    throw ApiError.badRequest(`${label} is outside the service area`);
-  }
-}
-
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
 /** Distance, ETA, surge-adjusted fare and the route polyline for a trip. */
 export async function estimateRide(input: RidePlaceInput): Promise<EstimateResponse> {
-  assertInServiceArea(input.pickup, "Pickup");
-  assertInServiceArea(input.drop, "Destination");
+  validateRidePoints(input.pickup, input.drop);
 
   const route = await getRoute(input.pickup, input.drop);
+  if (
+    !Number.isFinite(route.distanceKm) ||
+    route.distanceKm <= 0 ||
+    !Number.isFinite(route.durationMin) ||
+    route.durationMin <= 0
+  ) {
+    throw ApiError.badRequest("A valid route could not be calculated for these locations");
+  }
   const surge = await surgeForPickup(input.pickup.lat, input.pickup.lng);
   const fare = computeFare(route.distanceKm, route.durationMin, surge);
 
@@ -63,8 +65,7 @@ export async function createRide(
   input: RidePlaceInput,
   options: { strategy?: Strategy; simRunId?: string } = {},
 ) {
-  assertInServiceArea(input.pickup, "Pickup");
-  assertInServiceArea(input.drop, "Destination");
+  validateRidePoints(input.pickup, input.drop);
 
   const estimate = await estimateRide(input);
   const promisedEtaMin = Math.max(1, Math.round(estimate.etaMin));
@@ -91,6 +92,18 @@ export async function createRide(
     drop: input.drop,
     surge: estimate.surge,
   });
+  if (env.demoMode) {
+    await appendRideEvent(
+      ride.id,
+      "DEMO_MODE",
+      "Demo assignment enabled. Driver assignment ignores pickup distance; the ETA is simulated.",
+      {
+        driverEmail: env.demoDriverEmail,
+        etaMode: "simulated",
+        trackingMode: "last-reported-gps",
+      },
+    );
+  }
 
   await dispatchRide(ride.id, options.strategy ?? Strategy.SMART);
   return ride;

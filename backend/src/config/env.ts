@@ -11,6 +11,14 @@ function readInt(name: string, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function readBoolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name]?.trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === "true" || raw === "1") return true;
+  if (raw === "false" || raw === "0") return false;
+  throw new Error(`[env] ${name} must be true or false`);
+}
+
 const nodeEnv = process.env.NODE_ENV ?? "development";
 
 export const env = {
@@ -24,6 +32,9 @@ export const env = {
   osrmBaseUrl: process.env.OSRM_BASE_URL ?? "https://router.project-osrm.org",
   nominatimBaseUrl: process.env.NOMINATIM_BASE_URL ?? "https://nominatim.openstreetmap.org",
   httpTimeoutMs: readInt("HTTP_TIMEOUT_MS", 3000),
+  demoMode: readBoolean("DEMO_MODE", false),
+  demoDriverEmail: (process.env.DEMO_DRIVER_EMAIL ?? "driver@demo.com").trim().toLowerCase(),
+  demoPickupEtaMin: readInt("DEMO_PICKUP_ETA_MIN", 5),
 } as const;
 
 if (env.isProduction && env.jwtSecret === "dev-secret-change-me") {

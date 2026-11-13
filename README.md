@@ -5,11 +5,13 @@ and assigns nearby drivers, and rides are tracked in real time. The system also 
 forecasting, zone/surge intelligence, pooling, explainable allocation, reassignment, a seeded
 simulator and an evaluation dashboard.
 
-- **Passenger:** map-based pickup/drop selection, nearby drivers, fare and surge estimate, live ride
-  progress, allocation explanation and ride history.
-- **Driver:** availability, timed ride offers, ride progress, pooled stop order and trip history.
+- **Passenger:** address search, map/GPS pickup and destination selection with reverse-geocoded
+  labels, nearby drivers, route/fare/surge estimate, live ride progress, allocation explanation and
+  ride history.
+- **Driver:** availability, timed ride offers, ride progress, pooled stop order, trip history,
+  document onboarding and verification status, plus location-aware demand and repositioning guidance.
 - **Admin:** live fleet, demand heatmap, zones and surge, allocation, pooling, simulation, evaluation,
-  ride/driver management and event log.
+  ride/driver management, driver document review and event log.
 
 ## Stack
 
@@ -64,6 +66,23 @@ Seeded demo accounts use password `password123`:
 | Driver | `driver@demo.com` |
 | Admin | `admin@demo.com` |
 
+For deterministic hackathon dispatch, set `DEMO_MODE=true` in the backend root `.env` and set
+`DEMO_DRIVER_EMAIL` to an existing driver account (defaults to `driver@demo.com`). That driver must
+be online/available. Demo assignment ignores pickup distance but reserves the driver to prevent
+overlapping offers; the configured `DEMO_PICKUP_ETA_MIN` is labelled simulated in the UI. Passenger
+pickups and destination coordinates are never altered. Set `DEMO_MODE=false` for normal matching.
+
+Driver onboarding stores uploaded PDF/JPEG/PNG files privately under `backend/private-documents/`.
+Before saving bank details, replace the `SENSITIVE_DATA_KEY` example in `.env` with a generated
+64-character hexadecimal key (for example, `openssl rand -hex 32`). Losing this key makes encrypted
+bank-account values unreadable. Driver verification is a manual RideOps administrator review; it
+does not validate documents with government or third-party systems. The additive onboarding schema
+migration is under `backend/prisma/migrations/`. This repository's quick start initializes the
+schema with `npm run db:init` (`prisma db push`); do not apply the onboarding migration on top of a
+database where those tables already exist. For an existing migration-managed database, confirm its
+migration history and current schema before applying the additive migration. Never use
+`prisma migrate reset` on a database containing data.
+
 ## Commands
 
 | Command | Purpose |
@@ -105,6 +124,9 @@ history unless passed `--reset`. `train.py` evaluates a date-based holdout, writ
   driver offer, with retries and passenger notification when no candidate is available.
 - **Zones/surge:** a 20 × 20 grid blends recent requests with forecasts when available, compares
   demand with available supply, and calculates surge per zone.
+- **Driver demand:** the driver workspace separates observed requests in the recent 15-minute window
+  from model forecasts and simulator traffic, shows expected peak periods, and suggests a destination
+  zone when available supply can be repositioned toward a deficit.
 - **Pooling:** nearby pending rides are evaluated for valid pickup/drop ordering and detour limits;
   pooled fare uses the configured discount.
 - **Simulator/evaluation:** a seeded driver fleet generates requests and ride lifecycles; evaluation

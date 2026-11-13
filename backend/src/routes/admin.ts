@@ -1,6 +1,7 @@
 import { Role } from "@ps02/shared";
 import { Router } from "express";
 import * as controller from "../controllers/admin";
+import * as verificationController from "../controllers/driverVerification";
 import { requireAuth, requireRole } from "../middleware/auth";
 import { validate } from "../middleware/validate";
 import { asyncHandler } from "../utils/asyncHandler";
@@ -13,6 +14,28 @@ adminRouter.get("/overview", asyncHandler(controller.overview));
 adminRouter.get("/metrics", asyncHandler(controller.metrics));
 
 adminRouter.get("/drivers", asyncHandler(controller.drivers));
+adminRouter.get("/driver-onboarding", asyncHandler(verificationController.list));
+adminRouter.get(
+  "/driver-onboarding/documents/:documentId",
+  validate({ params: verificationController.documentIdSchema }),
+  asyncHandler(verificationController.getDocument),
+);
+adminRouter.post(
+  "/driver-onboarding/documents/:documentId/review",
+  validate({
+    params: verificationController.documentIdSchema,
+    body: verificationController.documentReviewSchema,
+  }),
+  asyncHandler(verificationController.reviewDocument),
+);
+adminRouter.post(
+  "/driver-onboarding/:driverId/review",
+  validate({
+    params: verificationController.applicationReviewSchema,
+    body: verificationController.applicationActionSchema,
+  }),
+  asyncHandler(verificationController.reviewApplication),
+);
 adminRouter.get("/rides", asyncHandler(controller.rides));
 adminRouter.get("/events", asyncHandler(controller.events));
 

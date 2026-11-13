@@ -242,7 +242,7 @@ async function createSimulatedRequest() {
   const ride = await createRide(
     passenger.id,
     { pickup, drop },
-    { strategy: state.strategy },
+    { strategy: state.strategy, simRunId: "simulator" },
   );
 
   state.activeRides += 1;

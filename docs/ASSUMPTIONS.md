@@ -33,8 +33,10 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
 11. **OSRM Haversine fallback** multiplies great-circle distance by 1.3 to approximate road
     distance; duration uses a fixed average speed.
 12. **Cache key:** coordinates rounded to 4 decimals, with both directions cached for `/table`.
-13. **Nominatim** is optional search only (max 1 request per second, cached); click-on-map is the
-    primary input.
+13. **Nominatim** powers address search and reverse geocoding through the authenticated backend
+    proxy. Requests are debounced in the client, cached in memory, and globally spaced by at least
+    one second in the single backend process. Map selection remains available when geocoding fails;
+    coordinates are retained and displayed as a fallback label.
 
 ## Simulation / time
 
@@ -92,3 +94,13 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
     evaluation baseline.
 34. **Tests.** Pure services (fare, surge, matching, pooling, ride state machine, evaluation) have
     Vitest unit tests. The health test tolerates an unreachable database.
+35. **Driver verification.** Document review is manual and records the reviewing admin; it does not
+    represent a government, identity-provider or insurer validation. Uploaded files are private,
+    signature-checked PDF/JPEG/PNG files capped at 5 MB.
+36. **Sensitive bank data.** Bank account numbers are encrypted with AES-256-GCM using the
+    deployment-provided `SENSITIVE_DATA_KEY`; the key is not stored in PostgreSQL. Only the last
+    four account digits and IFSC are returned to application clients.
+37. **Driver demand guidance.** Recent requests are split into measured and simulator traffic for
+    display; zone demand and surge continue to use both. Peak windows (08:00–10:00 and 17:00–20:00)
+    are descriptive demand-profile hours, not a promise of demand. Accepted map guidance opens the
+    target zone in OpenStreetMap; drivers update their own position and availability.

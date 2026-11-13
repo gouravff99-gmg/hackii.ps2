@@ -1,8 +1,9 @@
 import { DriverStatus, type NearbyDriver } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
-import { haversineKm, pointInBounds } from "./geo";
+import { haversineKm, pointInIndiaBounds } from "./geo";
 import { pickupEtaMinutes } from "./allocation";
+import { eligibleDriverWhere, isDriverEligible } from "./driverEligibility";
 
 /** Available drivers within `radiusKm` of a point, nearest first. */
 export async function findNearbyDrivers(
@@ -11,7 +12,7 @@ export async function findNearbyDrivers(
   radiusKm: number,
 ): Promise<NearbyDriver[]> {
   const drivers = await prisma.driver.findMany({
-    where: { status: DriverStatus.AVAILABLE },
+    where: { AND: [{ status: DriverStatus.AVAILABLE }, eligibleDriverWhere()] },
     include: { user: { select: { name: true } } },
   });
 
@@ -40,10 +41,20 @@ const ALLOWED_STATUS_CHANGES: Record<DriverStatus, DriverStatus[]> = {
 };
 
 export async function setDriverStatus(driverId: string, status: DriverStatus) {
-  const driver = await prisma.driver.findUnique({ where: { id: driverId } });
+  const driver = await prisma.driver.findUnique({
+    where: { id: driverId },
+    include: {
+      user: { select: { email: true } },
+      onboarding: { include: { documents: { select: { status: true, expiryDate: true } } } },
+    },
+  });
   if (!driver) throw ApiError.notFound("Driver profile not found");
 
-  if (driver.status === status) return driver;
+  const { user: _user, onboarding: _onboarding, ...safeDriver } = driver;
+  if (driver.status === status) return safeDriver;
+  if (status === DriverStatus.AVAILABLE && !isDriverEligible(driver)) {
+    throw ApiError.forbidden("Complete and receive approval for driver onboarding before going online");
+  }
 
   const allowed = ALLOWED_STATUS_CHANGES[driver.status];
   if (!allowed.includes(status)) {
@@ -60,8 +71,8 @@ export async function setDriverStatus(driverId: string, status: DriverStatus) {
 }
 
 export async function updateDriverLocation(driverId: string, lat: number, lng: number) {
-  if (!pointInBounds(lat, lng)) {
-    throw ApiError.badRequest("Location is outside the service area");
+  if (!pointInIndiaBounds(lat, lng)) {
+    throw ApiError.badRequest("Driver location must be within India");
   }
   return prisma.driver.update({
     where: { id: driverId },

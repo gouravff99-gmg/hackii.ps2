@@ -4,6 +4,8 @@ import type {
   AllocationSnapshot,
   ChaosResponse,
   DriverAdminView,
+  DriverOnboardingAdminResponse,
+  DriverOnboardingApplication,
   EvaluationHistoryItem,
   ForecastComparisonResponse,
   Metrics,
@@ -77,5 +79,27 @@ export const adminApi = {
   },
   simRuns() {
     return api.get<{ runs: EvaluationHistoryItem[] }>("/admin/sim-runs");
+  },
+  driverApplications() {
+    return api.get<DriverOnboardingAdminResponse>("/admin/driver-onboarding");
+  },
+  reviewDriverDocument(documentId: string, approve: boolean, reason?: string) {
+    return api.post<{ result: { ok: boolean; status: string } }>(
+      `/admin/driver-onboarding/documents/${documentId}/review`,
+      { approve, reason },
+    );
+  },
+  reviewDriverApplication(
+    driverId: string,
+    action: "approve" | "request_changes" | "reject" | "revoke",
+    reason?: string,
+  ) {
+    return api.post<{ application: DriverOnboardingApplication }>(
+      `/admin/driver-onboarding/${driverId}/review`,
+      { action, reason },
+    );
+  },
+  driverDocument(documentId: string) {
+    return api.download(`/admin/driver-onboarding/documents/${documentId}`);
   },
 };

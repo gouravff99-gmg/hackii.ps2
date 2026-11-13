@@ -75,11 +75,36 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return data as T;
 }
 
+async function download(path: string): Promise<Blob> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const response = await fetch(`/api${path}`, { headers });
+  if (!response.ok) {
+    const text = await response.text();
+    let message = `Request failed (${response.status})`;
+    try {
+      const body = JSON.parse(text) as ApiErrorBody;
+      message = body.error?.message ?? message;
+    } catch {
+      if (text) message = text;
+    }
+    throw new ApiClientError(message, response.status);
+  }
+  return response.blob();
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get: <T>(path: string, options?: Pick<RequestInit, "signal">) =>
+    request<T>(path, options),
   post: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "POST",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }),
+  put: <T>(path: string, body?: unknown) =>
+    request<T>(path, {
+      method: "PUT",
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   patch: <T>(path: string, body?: unknown) =>
@@ -88,6 +113,16 @@ export const api = {
       body: body === undefined ? undefined : JSON.stringify(body),
     }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, file: File, expiryDate?: string) => {
+    const params = new URLSearchParams({ fileName: file.name });
+    if (expiryDate) params.set("expiryDate", expiryDate);
+    return request<T>(`${path}?${params.toString()}`, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    });
+  },
+  download,
 };
 
 export function errorMessage(error: unknown): string {

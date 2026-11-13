@@ -1,6 +1,9 @@
 import type {
   ChaosAction,
   DriverStatus,
+  DriverDocumentType,
+  DriverOnboardingStatus,
+  DocumentReviewStatus,
   RideStatus,
   Role,
   Strategy,
@@ -10,6 +13,12 @@ import type {
 export interface LatLng {
   lat: number;
   lng: number;
+}
+
+export interface PlaceSuggestion extends LatLng {
+  placeId: string;
+  displayName: string;
+  type?: string;
 }
 
 export interface BBox {
@@ -46,6 +55,41 @@ export interface Driver {
   busyMinutesToday: number;
   lastIdleSince: string;
   isSimulated: boolean;
+}
+
+export interface DriverOnboardingDocument {
+  id: string;
+  type: DriverDocumentType;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  status: DocumentReviewStatus;
+  expiryDate?: string | null;
+  rejectionReason?: string | null;
+  uploadedAt: string;
+}
+
+export interface DriverOnboardingApplication {
+  driverId: string;
+  status: DriverOnboardingStatus;
+  adminComments?: string | null;
+  submittedAt?: string | null;
+  approvedAt?: string | null;
+  documents: DriverOnboardingDocument[];
+  safetyChecklist: Record<string, boolean>;
+  safetyTrainingComplete: boolean;
+  bankAccountLast4?: string | null;
+  bankIfsc?: string | null;
+  completionPercent: number;
+  updatedAt: string;
+}
+
+export interface DriverVerificationHistoryEntry {
+  id: string;
+  action: string;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+  actorName: string;
 }
 
 export interface Ride {

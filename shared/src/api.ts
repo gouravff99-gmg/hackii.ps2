@@ -1,14 +1,17 @@
 import type {
   AllocationBreakdown,
   AuthUser,
-  ForecastCell,
   LatLng,
+  DriverOnboardingApplication,
+  DriverVerificationHistoryEntry,
+  ForecastCell,
   Metrics,
   NearbyDriver,
   PoolCandidate,
   PoolPlan,
   Recommendation,
   Ride,
+  ZoneId,
   ZoneSnapshot,
 } from "./types";
 import type { DriverStatus, RideStatus, Strategy } from "./enums";
@@ -60,6 +63,17 @@ export interface RideDetailResponse {
 
 export interface DriverActiveRideResponse {
   ride: (RideDetailView & { passenger: RidePersonView }) | null;
+}
+
+export interface DriverOnboardingResponse {
+  application: DriverOnboardingApplication;
+}
+
+export interface DriverOnboardingAdminResponse {
+  applications: (DriverOnboardingApplication & {
+    driver: { id: string; user: RidePersonView; vehicleType: string };
+  })[];
+  history: DriverVerificationHistoryEntry[];
 }
 
 export interface NearbyDriversResponse {
@@ -123,6 +137,30 @@ export interface ZoneIntelligenceResponse {
   hourOfDay: number;
   windowMinutes: number;
   recommendations: Recommendation[];
+}
+
+export interface DriverZoneInsight extends ZoneSnapshot {
+  distanceKm: number;
+  recentRequests15m: number;
+  measuredRequests15m: number;
+  simulatedRequests15m: number;
+}
+
+export interface DriverDemandInsightsResponse {
+  currentZone: DriverZoneInsight;
+  nearbyZones: DriverZoneInsight[];
+  recommendation: {
+    targetZone: ZoneId;
+    center: LatLng;
+    distanceKm: number;
+    reason: string;
+  } | null;
+  driverStatus: DriverStatus;
+  driverIsSimulated: boolean;
+  hourOfDay: number;
+  observedWindowMinutes: number;
+  /** Inclusive hourly ranges from the synthetic demand profile. */
+  peakPeriods: { startHour: number; endHour: number }[];
 }
 
 export interface ForecastComparisonResponse {

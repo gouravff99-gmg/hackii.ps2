@@ -34,6 +34,7 @@ export function OfferCard({
 }) {
   const remaining = useCountdown(offer.expiresAt);
   const expired = remaining <= 0;
+  const pickupMapUrl = `https://www.openstreetmap.org/?mlat=${offer.pickup.lat}&mlon=${offer.pickup.lng}#map=16/${offer.pickup.lat}/${offer.pickup.lng}`;
 
   return (
     <Card className="overflow-hidden border-brand-200">
@@ -45,16 +46,22 @@ export function OfferCard({
           </span>
           <p className="text-sm font-semibold">New ride request</p>
         </div>
-        <Badge tone={expired ? "danger" : "warning"}>
-          {expired ? "Expired" : `${remaining}s`}
-        </Badge>
+        <div className="flex items-center gap-2">
+          {offer.demoMode ? <Badge tone="warning">DEMO MODE</Badge> : null}
+          <Badge tone={expired ? "danger" : "warning"}>
+            {expired ? "Expired" : `${remaining}s`}
+          </Badge>
+        </div>
       </div>
 
       <CardBody className="flex flex-col gap-4">
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-xs uppercase tracking-wide text-ink-400">Pickup ETA</p>
-            <p className="mt-0.5 font-medium text-ink-900">{formatMinutes(offer.etaMin)}</p>
+            <p className="mt-0.5 font-medium text-ink-900">
+              {formatMinutes(offer.etaMin)}
+              {offer.demoMode ? " (simulated)" : ""}
+            </p>
           </div>
           <div>
             <p className="text-xs uppercase tracking-wide text-ink-400">Trip distance</p>
@@ -70,6 +77,31 @@ export function OfferCard({
               {Math.round(offer.timeoutMs / 1000)}s total
             </p>
           </div>
+        </div>
+
+        <div className="rounded-xl bg-ink-50 p-3 text-sm">
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-ink-400">Pickup location</p>
+              <p className="mt-1 break-words font-medium text-ink-900">
+                {offer.pickup.lat.toFixed(5)}, {offer.pickup.lng.toFixed(5)}
+              </p>
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-wide text-ink-400">Destination</p>
+              <p className="mt-1 break-words font-medium text-ink-900">
+                {offer.drop.lat.toFixed(5)}, {offer.drop.lng.toFixed(5)}
+              </p>
+            </div>
+          </div>
+          <a
+            href={pickupMapUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex font-medium text-brand-700 hover:text-brand-800"
+          >
+            Open pickup in OpenStreetMap
+          </a>
         </div>
 
         <div className="flex gap-2">

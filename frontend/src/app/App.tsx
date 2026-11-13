@@ -17,6 +17,8 @@ import { DriverDashboard } from "../pages/driver/DriverDashboard";
 import { RideRequests } from "../pages/driver/RideRequests";
 import { MyTrips } from "../pages/driver/MyTrips";
 import { DriverProfile } from "../pages/driver/DriverProfile";
+import { Onboarding } from "../pages/driver/Onboarding";
+import { DemandInsights as DriverDemandInsights } from "../pages/driver/DemandInsights";
 import { Overview } from "../pages/admin/Overview";
 import { LiveFleet } from "../pages/admin/LiveFleet";
 import { DemandIntelligence } from "../pages/admin/DemandIntelligence";
@@ -26,6 +28,7 @@ import { SmartAllocation } from "../pages/admin/SmartAllocation";
 import { Simulation } from "../pages/admin/Simulation";
 import { Evaluation } from "../pages/admin/Evaluation";
 import { Settings } from "../pages/admin/Settings";
+import { DriverVerification } from "../pages/admin/DriverVerification";
 import { FullPageLoader } from "../components/ui/Spinner";
 import { homeForRole } from "../utils/roles";
 import { ProtectedRoute } from "./ProtectedRoute";
@@ -88,6 +91,8 @@ export default function App() {
         <Route path="requests" element={<RideRequests />} />
         <Route path="trips" element={<MyTrips />} />
         <Route path="profile" element={<DriverProfile />} />
+        <Route path="onboarding" element={<Onboarding />} />
+        <Route path="demand" element={<DriverDemandInsights />} />
       </Route>
 
       <Route
@@ -103,6 +108,7 @@ export default function App() {
         <Route path="demand" element={<DemandIntelligence />} />
         <Route path="rides" element={<RideManagement />} />
         <Route path="drivers" element={<DriverManagement />} />
+        <Route path="verification" element={<DriverVerification />} />
         <Route path="allocation" element={<SmartAllocation />} />
         <Route path="simulation" element={<Simulation />} />
         <Route path="evaluation" element={<Evaluation />} />

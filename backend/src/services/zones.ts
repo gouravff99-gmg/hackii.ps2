@@ -1,7 +1,15 @@
-import { DriverStatus, type Recommendation, type ZoneSnapshot } from "@ps02/shared";
+import { DriverStatus as PrismaDriverStatus } from "@prisma/client";
+import {
+  DriverStatus as SharedDriverStatus,
+  type DriverDemandInsightsResponse,
+  type DriverZoneInsight,
+  type Recommendation,
+  type ZoneSnapshot,
+} from "@ps02/shared";
 import { prisma } from "../lib/prisma";
 import { computeSurge, demandSupplyRatio } from "./surge";
-import { ZONE_GRID, zoneCenter, zoneIdFor } from "./geo";
+import { haversineKm, pointInBounds, ZONE_GRID, zoneCenter, zoneIdFor } from "./geo";
+import { ApiError } from "../utils/ApiError";
 
 /** Demand is measured over this trailing window, then scaled to an hourly rate. */
 export const DEMAND_WINDOW_MINUTES = 15;
@@ -36,7 +44,7 @@ export async function getZoneMetrics(options: ZoneMetricsOptions = {}): Promise<
       select: { pickupLat: true, pickupLng: true },
     }),
     prisma.driver.findMany({
-      where: { status: DriverStatus.AVAILABLE },
+      where: { status: PrismaDriverStatus.AVAILABLE },
       select: { lat: true, lng: true },
     }),
     prisma.demandForecast.findMany({
@@ -95,6 +103,7 @@ export async function getZoneMetrics(options: ZoneMetricsOptions = {}): Promise<
 
 /** Surge multiplier for the zone containing a pickup point. */
 export async function surgeForPickup(lat: number, lng: number, metrics?: ZoneMetrics): Promise<number> {
+  if (!pointInBounds(lat, lng)) return 1;
   const zoneId = zoneIdFor(lat, lng);
   const resolved = metrics ?? (await getZoneMetrics());
   const zone = resolved.zones.find((entry) => entry.zoneId === zoneId);
@@ -132,6 +141,86 @@ export function buildRecommendations(zones: ZoneSnapshot[], limit = 8): Recommen
   }
 
   return recommendations;
+}
+
+export async function getDriverDemandInsights(
+  driverId: string,
+  now = new Date(),
+): Promise<DriverDemandInsightsResponse> {
+  const driver = await prisma.driver.findUnique({
+    where: { id: driverId },
+    select: { lat: true, lng: true, status: true, isSimulated: true },
+  });
+  if (!driver) throw ApiError.notFound("Driver profile not found");
+
+  const metrics = await getZoneMetrics({ now });
+  const since = new Date(now.getTime() - DEMAND_WINDOW_MINUTES * 60_000);
+  const recentRides = await prisma.ride.findMany({
+    where: { requestedAt: { gte: since } },
+    select: { pickupLat: true, pickupLng: true, simRunId: true },
+  });
+  const requestsByZone = new Map<string, { measured: number; simulated: number }>();
+  for (const ride of recentRides) {
+    const zoneId = zoneIdFor(ride.pickupLat, ride.pickupLng);
+    const counts = requestsByZone.get(zoneId) ?? { measured: 0, simulated: 0 };
+    if (ride.simRunId) counts.simulated += 1;
+    else counts.measured += 1;
+    requestsByZone.set(zoneId, counts);
+  }
+
+  const point = { lat: driver.lat, lng: driver.lng };
+  const currentZoneId = zoneIdFor(driver.lat, driver.lng);
+  const toInsight = (zone: ZoneSnapshot): DriverZoneInsight => {
+    const counts = requestsByZone.get(zone.zoneId) ?? { measured: 0, simulated: 0 };
+    return {
+      ...zone,
+      distanceKm: haversineKm(point, zone.center),
+      measuredRequests15m: counts.measured,
+      simulatedRequests15m: counts.simulated,
+      recentRequests15m: counts.measured + counts.simulated,
+    };
+  };
+  const zonesById = new Map(metrics.zones.map((zone) => [zone.zoneId, zone]));
+  const current = zonesById.get(currentZoneId);
+  if (!current) throw new ApiError(500, "Could not resolve the driver's demand zone");
+
+  const nearbyZones = metrics.zones
+    .map(toInsight)
+    .filter((zone) => zone.zoneId !== currentZoneId && zone.distanceKm <= 5)
+    .sort((a, b) => b.ratio - a.ratio || a.distanceKm - b.distanceKm)
+    .slice(0, 5);
+
+  const suggestion = driver.status === PrismaDriverStatus.AVAILABLE
+    ? buildRecommendations(metrics.zones).find((item) => item.fromZone === currentZoneId)
+    : undefined;
+  const target = suggestion ? zonesById.get(suggestion.toZone) : undefined;
+
+  return {
+    currentZone: toInsight(current),
+    nearbyZones,
+    recommendation:
+      suggestion && target
+        ? {
+            targetZone: target.zoneId,
+            center: target.center,
+            distanceKm: haversineKm(point, target.center),
+            reason: suggestion.reason,
+          }
+        : null,
+    driverStatus: {
+      [PrismaDriverStatus.OFFLINE]: SharedDriverStatus.OFFLINE,
+      [PrismaDriverStatus.AVAILABLE]: SharedDriverStatus.AVAILABLE,
+      [PrismaDriverStatus.BUSY]: SharedDriverStatus.BUSY,
+      [PrismaDriverStatus.REPOSITIONING]: SharedDriverStatus.REPOSITIONING,
+    }[driver.status],
+    driverIsSimulated: driver.isSimulated,
+    hourOfDay: metrics.hourOfDay,
+    observedWindowMinutes: metrics.windowMinutes,
+    peakPeriods: [
+      { startHour: 8, endHour: 10 },
+      { startHour: 17, endHour: 20 },
+    ],
+  };
 }
 
 function round2(value: number): number {

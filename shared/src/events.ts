@@ -62,6 +62,7 @@ export interface RideOfferPayload {
   fareEstimate: number;
   expiresAt: string;
   timeoutMs: number;
+  demoMode?: boolean;
 }
 
 export interface RideReassignedPayload {

@@ -22,5 +22,6 @@ ml/.cache/
 # prisma / local db
 backend/prisma/*.db
 backend/prisma/*.db-journal
+backend/private-documents/
 apps/api/prisma/*.db
 apps/api/prisma/*.db-journal

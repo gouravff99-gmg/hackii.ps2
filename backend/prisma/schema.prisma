@@ -22,6 +22,41 @@ enum DriverStatus {
   REPOSITIONING
 }
 
+enum DriverOnboardingStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DOCUMENTS_SUBMITTED
+  UNDER_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  REVOKED
+  REJECTED
+  EXPIRED
+}
+
+enum DriverDocumentType {
+  DRIVING_LICENSE
+  TRANSPORT_BADGE
+  AADHAAR
+  PAN
+  PROFILE_PHOTO
+  POLICE_VERIFICATION
+  VEHICLE_RC
+  INSURANCE
+  PERMIT
+  FITNESS_CERTIFICATE
+  PUC_CERTIFICATE
+  OWNER_NOC
+  BANK_PROOF
+  LIVE_SELFIE
+}
+
+enum DocumentReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum RideStatus {
   REQUESTED
   ACCEPTED
@@ -47,6 +82,8 @@ model User {
 
   driver Driver?
   rides  Ride[]   @relation("PassengerRides")
+  reviews DriverVerificationHistory[] @relation("VerificationActor")
+  documentReviews DriverOnboardingDocument[] @relation("DocumentReviewer")
 }
 
 model Driver {
@@ -65,8 +102,64 @@ model Driver {
   createdAt        DateTime     @default(now())
 
   rides Ride[]
+  onboarding DriverOnboarding?
 
   @@index([status])
+}
+
+model DriverOnboarding {
+  id                     String                @id @default(cuid())
+  driverId               String                @unique
+  driver                 Driver                @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  status                 DriverOnboardingStatus @default(NOT_STARTED)
+  safetyChecklist        Json                  @default("{}")
+  safetyTrainingComplete Boolean               @default(false)
+  bankAccountEncrypted   String?
+  bankAccountLast4       String?
+  bankIfsc               String?
+  adminComments          String?
+  submittedAt            DateTime?
+  approvedAt             DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  documents DriverOnboardingDocument[]
+  history   DriverVerificationHistory[]
+}
+
+model DriverOnboardingDocument {
+  id               String               @id @default(cuid())
+  onboardingId     String
+  onboarding       DriverOnboarding     @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  type             DriverDocumentType
+  storageKey       String               @unique
+  originalName     String
+  mimeType         String
+  sizeBytes        Int
+  status           DocumentReviewStatus @default(PENDING)
+  expiryDate       DateTime?
+  rejectionReason  String?
+  reviewedById     String?
+  reviewedBy       User?                @relation("DocumentReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  uploadedAt       DateTime             @default(now())
+  reviewedAt       DateTime?
+
+  @@unique([onboardingId, type])
+  @@index([status, expiryDate])
+}
+
+model DriverVerificationHistory {
+  id           String           @id @default(cuid())
+  onboardingId String
+  onboarding   DriverOnboarding @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  actorId      String
+  actor        User             @relation("VerificationActor", fields: [actorId], references: [id], onDelete: Restrict)
+  action       String
+  details      Json?
+  createdAt    DateTime         @default(now())
+
+  @@index([onboardingId, createdAt])
+  @@index([actorId, createdAt])
 }
 
 model Ride {

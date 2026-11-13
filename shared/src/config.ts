@@ -15,6 +15,16 @@ export const CITY = {
   },
 } as const;
 
+/** Approximate mainland India bounds used for passenger booking and map selection. */
+export const INDIA_BOUNDS = {
+  north: 37.6,
+  south: 6.5,
+  east: 97.5,
+  west: 68.0,
+} as const;
+
+export const INDIA_CENTER = { lat: 22.5, lng: 82.75 } as const;
+
 export const ZONE_SIZE_KM = 1;
 
 export const FARE = {

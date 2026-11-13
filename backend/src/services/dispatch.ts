@@ -6,10 +6,12 @@ import {
   TIMEOUTS,
   type RideOfferPayload,
 } from "@ps02/shared";
+import { env } from "../config/env";
 import { prisma } from "../lib/prisma";
 import { scaledMs } from "../lib/runtime";
 import { ApiError } from "../utils/ApiError";
-import { allocateDriver, type AllocationResult } from "./allocation";
+import { allocateDemoDriver, allocateDriver, type AllocationResult } from "./allocation";
+import { isDriverEligible } from "./driverEligibility";
 import {
   appendRideEvent,
   transitionRide,
@@ -39,6 +41,7 @@ interface AttemptState {
 const activeOffers = new Map<string, OfferState>();
 const attempts = new Map<string, AttemptState>();
 const retryTimers = new Map<string, NodeJS.Timeout>();
+const reservedDrivers = new Set<string>();
 
 function attemptFor(rideId: string): AttemptState {
   let state = attempts.get(rideId);
@@ -59,16 +62,44 @@ export function clearDispatchState(rideId: string) {
   attempts.delete(rideId);
 }
 
-function clearOffer(rideId: string) {
+function clearOffer(rideId: string, keepDriverReserved = false) {
   const offer = activeOffers.get(rideId);
   if (offer) {
     clearTimeout(offer.timeout);
     activeOffers.delete(rideId);
+    if (!keepDriverReserved) reservedDrivers.delete(offer.driverId);
   }
 }
 
 export function getActiveOffer(rideId: string): OfferState | undefined {
   return activeOffers.get(rideId);
+}
+
+export async function getDriverOffer(driverId: string): Promise<RideOfferPayload | null> {
+  const offer = [...activeOffers.values()].find((current) => current.driverId === driverId);
+  if (!offer || offer.expiresAt <= Date.now()) return null;
+
+  const ride = await prisma.ride.findUnique({ where: { id: offer.rideId } });
+  if (
+    !ride ||
+    (ride.status !== RideStatus.REQUESTED && ride.status !== RideStatus.REASSIGNING)
+  ) {
+    clearOffer(offer.rideId);
+    return null;
+  }
+
+  const timeoutMs = Math.max(0, offer.expiresAt - Date.now());
+  return {
+    rideId: ride.id,
+    pickup: { lat: ride.pickupLat, lng: ride.pickupLng },
+    drop: { lat: ride.dropLat, lng: ride.dropLng },
+    distanceKm: ride.distanceKm,
+    etaMin: offer.etaMin,
+    fareEstimate: ride.fareEstimate,
+    expiresAt: new Date(offer.expiresAt).toISOString(),
+    timeoutMs,
+    demoMode: env.demoMode,
+  };
 }
 
 /** True when this driver currently holds an unexpired offer for the ride. */
@@ -91,11 +122,16 @@ export async function dispatchRide(
   if (ride.status !== RideStatus.REQUESTED && ride.status !== RideStatus.REASSIGNING) return null;
 
   const attempt = attemptFor(rideId);
-  const result = await allocateDriver({
-    pickup: { lat: ride.pickupLat, lng: ride.pickupLng },
-    strategy,
-    excludeDriverIds: [...attempt.excluded],
-  });
+  const pickup = { lat: ride.pickupLat, lng: ride.pickupLng };
+  const result =
+    env.demoMode && ride.simRunId !== "simulator"
+      ? await allocateDemoDriver({ pickup, excludeDriverIds: [...attempt.excluded] })
+      : await allocateDriver({
+        pickup,
+        strategy,
+        excludeDriverIds: [...attempt.excluded],
+        includeSimulated: ride.simRunId === "simulator",
+      });
 
   await prisma.ride.update({
     where: { id: rideId },
@@ -103,6 +139,10 @@ export async function dispatchRide(
   });
 
   if (!result.chosen) {
+    if (env.demoMode && result.retryable) {
+      scheduleRetry(rideId, strategy);
+      return result;
+    }
     attempt.count += 1;
     if (attempt.count > MAX_DISPATCH_ATTEMPTS) {
       await appendRideEvent(rideId, "NOTIFICATION", "No driver could be assigned");
@@ -120,11 +160,36 @@ export async function dispatchRide(
     return result;
   }
 
-  const driver = await prisma.driver.findUnique({
-    where: { id: result.chosen.driverId },
-    include: { user: { select: { id: true } } },
-  });
+  if (reservedDrivers.has(result.chosen.driverId)) {
+    if (env.demoMode) {
+      scheduleRetry(rideId, strategy);
+      return result;
+    }
+    attempt.excluded.add(result.chosen.driverId);
+    return dispatchRide(rideId, strategy);
+  }
+  reservedDrivers.add(result.chosen.driverId);
+
+  let driver;
+  try {
+    driver = await prisma.driver.findUnique({
+      where: { id: result.chosen.driverId },
+      include: { user: { select: { id: true } } },
+    });
+  } catch (error) {
+    reservedDrivers.delete(result.chosen.driverId);
+    throw error;
+  }
   if (!driver || driver.status !== DriverStatus.AVAILABLE) {
+    reservedDrivers.delete(result.chosen.driverId);
+    if (env.demoMode && driver?.status === DriverStatus.BUSY) {
+      scheduleRetry(rideId, strategy);
+      return result;
+    }
+    if (!driver) {
+      attempt.excluded.add(result.chosen.driverId);
+      return dispatchRide(rideId, strategy);
+    }
     // The chosen driver became busy between ranking and offering; try again.
     attempt.excluded.add(result.chosen.driverId);
     return dispatchRide(rideId, strategy);
@@ -142,6 +207,7 @@ export async function dispatchRide(
     fareEstimate: ride.fareEstimate,
     expiresAt: new Date(expiresAt).toISOString(),
     timeoutMs,
+    demoMode: env.demoMode,
   };
 
   const timeout = setTimeout(() => {
@@ -150,22 +216,29 @@ export async function dispatchRide(
     });
   }, timeoutMs);
 
-  activeOffers.set(rideId, {
-    rideId,
-    driverId: driver.id,
-    driverUserId: driver.user.id,
-    etaMin: result.chosen.raw.etaMin,
-    expiresAt,
-    timeout,
-  });
+  try {
+    activeOffers.set(rideId, {
+      rideId,
+      driverId: driver.id,
+      driverUserId: driver.user.id,
+      etaMin: result.chosen.raw.etaMin,
+      expiresAt,
+      timeout,
+    });
 
-  emitToUser(driver.user.id, SOCKET_EVENTS.RIDE_OFFER, payload);
-  await appendRideEvent(rideId, "OFFER_SENT", `Offer sent to driver ${driver.id}`, {
-    driverId: driver.id,
-    strategy,
-    score: result.chosen.score,
-    timeoutMs,
-  });
+    emitToUser(driver.user.id, SOCKET_EVENTS.RIDE_OFFER, payload);
+    await appendRideEvent(rideId, "OFFER_SENT", `Offer sent to driver ${driver.id}`, {
+      driverId: driver.id,
+      strategy,
+      score: result.chosen.score,
+      timeoutMs,
+      demoMode: env.demoMode,
+      etaMode: env.demoMode ? "simulated" : "estimated",
+    });
+  } catch (error) {
+    clearOffer(rideId);
+    throw error;
+  }
 
   return result;
 }
@@ -269,6 +342,7 @@ async function releaseDriver(driverId: string) {
       lastIdleSince: new Date(),
     },
   });
+  reservedDrivers.delete(driverId);
 }
 
 async function adjustAcceptanceRate(driverId: string, delta: number) {
@@ -294,11 +368,19 @@ export async function respondToOffer(params: {
     throw ApiError.conflict("This ride offer is no longer active");
   }
 
-  clearOffer(rideId);
+  clearOffer(rideId, accept);
 
-  const ride = await prisma.ride.findUnique({ where: { id: rideId } });
+  let ride;
+  try {
+    ride = await prisma.ride.findUnique({ where: { id: rideId } });
+  } catch (error) {
+    if (accept) reservedDrivers.delete(driverId);
+    throw error;
+  }
+  if (!ride && accept) reservedDrivers.delete(driverId);
   if (!ride) throw ApiError.notFound("Ride not found");
   if (ride.status !== RideStatus.REQUESTED && ride.status !== RideStatus.REASSIGNING) {
+    if (accept) reservedDrivers.delete(driverId);
     throw ApiError.conflict("This ride can no longer be accepted");
   }
 
@@ -312,33 +394,56 @@ export async function respondToOffer(params: {
     return refreshed as RideWithPeople;
   }
 
-  const driver = await prisma.driver.findUnique({
-    where: { id: driverId },
-    include: { user: { select: { id: true, name: true } } },
-  });
-  if (!driver) throw ApiError.notFound("Driver profile not found");
+  let driver;
+  try {
+    driver = await prisma.driver.findUnique({
+      where: { id: driverId },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        onboarding: { include: { documents: { select: { status: true, expiryDate: true } } } },
+      },
+    });
+  } catch (error) {
+    reservedDrivers.delete(driverId);
+    throw error;
+  }
+  if (!driver) {
+    reservedDrivers.delete(driverId);
+    throw ApiError.notFound("Driver profile not found");
+  }
+  if (!isDriverEligible(driver, { includeSimulated: ride.simRunId === "simulator" })) {
+    reservedDrivers.delete(driverId);
+    throw ApiError.forbidden("Driver onboarding approval is required before accepting rides");
+  }
 
   const promisedEtaMin = Math.max(1, Math.round(offer.etaMin));
-  const updated = await transitionRide({
-    rideId,
-    to: RideStatus.ACCEPTED,
-    message: `Driver accepted the ride (ETA ${promisedEtaMin} min)`,
-    update: {
-      driver: { connect: { id: driverId } },
-      acceptedAt: new Date(),
-      promisedEtaMin,
-    },
-    payload: { driverId, etaMin: promisedEtaMin },
-    etaMin: promisedEtaMin,
-  });
+  let updated: RideWithPeople;
+  try {
+    updated = await transitionRide({
+      rideId,
+      to: RideStatus.ACCEPTED,
+      message: `Driver accepted the ride (ETA ${promisedEtaMin} min)`,
+      update: {
+        driver: { connect: { id: driverId } },
+        acceptedAt: new Date(),
+        promisedEtaMin,
+      },
+      payload: { driverId, etaMin: promisedEtaMin, demoMode: env.demoMode },
+      etaMin: promisedEtaMin,
+    });
 
-  await prisma.driver.update({
-    where: { id: driverId },
-    data: {
-      status: DriverStatus.BUSY,
-      acceptanceRate: Math.min(1, driver.acceptanceRate + 0.01),
-    },
-  });
+    await prisma.driver.update({
+      where: { id: driverId },
+      data: {
+        status: DriverStatus.BUSY,
+        acceptanceRate: Math.min(1, driver.acceptanceRate + 0.01),
+      },
+    });
+  } catch (error) {
+    reservedDrivers.delete(driverId);
+    throw error;
+  }
+  reservedDrivers.delete(driverId);
 
   attempts.delete(rideId);
   const retry = retryTimers.get(rideId);

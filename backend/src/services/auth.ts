@@ -63,6 +63,7 @@ export async function register(input: RegisterInput): Promise<AuthResponse> {
                 status: DriverStatus.OFFLINE,
                 lat: CITY.center.lat,
                 lng: CITY.center.lng,
+                onboarding: { create: {} },
               },
             }
           : undefined,

@@ -20,6 +20,7 @@ ridesRouter.post(
 
 ridesRouter.get("/history", requireRole(Role.PASSENGER), asyncHandler(controller.history));
 ridesRouter.get("/driver/active", requireRole(Role.DRIVER), asyncHandler(controller.driverActive));
+ridesRouter.get("/driver/offer", requireRole(Role.DRIVER), asyncHandler(controller.driverOffer));
 ridesRouter.get("/driver/history", requireRole(Role.DRIVER), asyncHandler(controller.driverHistory));
 
 ridesRouter.post(

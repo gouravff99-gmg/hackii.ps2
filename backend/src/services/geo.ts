@@ -1,4 +1,4 @@
-import { CITY, ZONE_SIZE_KM, type LatLng, type ZoneId } from "@ps02/shared";
+import { CITY, INDIA_BOUNDS, ZONE_SIZE_KM, type LatLng, type ZoneId } from "@ps02/shared";
 
 const DEG = Math.PI / 180;
 const EARTH_RADIUS_KM = 6371;
@@ -89,6 +89,17 @@ export function pointInBounds(lat: number, lng: number): boolean {
     lat >= CITY.bounds.south &&
     lng >= CITY.bounds.west &&
     lng <= CITY.bounds.east
+  );
+}
+
+export function pointInIndiaBounds(lat: number, lng: number): boolean {
+  return (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    lat >= INDIA_BOUNDS.south &&
+    lat <= INDIA_BOUNDS.north &&
+    lng >= INDIA_BOUNDS.west &&
+    lng <= INDIA_BOUNDS.east
   );
 }
 

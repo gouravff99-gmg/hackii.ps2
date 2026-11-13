@@ -58,6 +58,7 @@ export function MyRides() {
   const [cancelling, setCancelling] = useState(false);
 
   const rides = history.data?.rides ?? [];
+  const isDemoRide = detail?.events.some((event) => event.type === "DEMO_MODE") ?? false;
 
   useEffect(() => {
     if (selectedId) return;
@@ -134,11 +135,13 @@ export function MyRides() {
         lat: detail.driver.lat,
         lng: detail.driver.lng,
         kind: "driver" as const,
-        label: detail.driver.user.name,
+        label: isDemoRide
+          ? `${detail.driver.user.name} · last reported GPS`
+          : detail.driver.user.name,
       });
     }
     return list;
-  }, [detail]);
+  }, [detail, isDemoRide]);
 
   return (
     <div className="flex flex-col gap-5">
@@ -232,6 +235,22 @@ export function MyRides() {
                 <CardBody className="flex flex-col gap-4">
                   <RideStatusStepper status={detail.status} />
 
+                  {isDemoRide ? (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Badge tone="warning">DEMO MODE</Badge>
+                        <p className="text-sm font-medium text-amber-900">
+                          Simulated driver assignment
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs text-amber-800">
+                        Pickup distance is ignored and the pickup ETA is simulated. The map shows
+                        the driver&apos;s last reported GPS position, not a claim that they are at
+                        your pickup.
+                      </p>
+                    </div>
+                  ) : null}
+
                   {detail.driver ? (
                     <div className="flex items-center justify-between rounded-xl border border-ink-200 px-4 py-3">
                       <div>
@@ -243,7 +262,10 @@ export function MyRides() {
                           {detail.driver.vehicleType} · {detail.driver.completedToday} trips today
                         </p>
                       </div>
-                      <Badge tone="info">ETA {formatMinutes(detail.promisedEtaMin)}</Badge>
+                      <Badge tone={isDemoRide ? "warning" : "info"}>
+                        {isDemoRide ? "Simulated ETA " : "ETA "}
+                        {formatMinutes(detail.promisedEtaMin)}
+                      </Badge>
                     </div>
                   ) : null}
 

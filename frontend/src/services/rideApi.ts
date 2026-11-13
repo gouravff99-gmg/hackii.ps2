@@ -7,6 +7,7 @@ import type {
   RideDetailResponse,
   RideDetailView,
   RideListResponse,
+  RideOfferPayload,
 } from "@ps02/shared";
 import { api } from "./api";
 
@@ -28,6 +29,9 @@ export const rideApi = {
   },
   driverActive() {
     return api.get<DriverActiveRideResponse>("/rides/driver/active");
+  },
+  driverOffer() {
+    return api.get<{ offer: RideOfferPayload | null }>("/rides/driver/offer");
   },
   driverHistory() {
     return api.get<RideListResponse>("/rides/driver/history");

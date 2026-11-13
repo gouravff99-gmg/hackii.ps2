@@ -5,6 +5,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error";
 import { adminRouter } from "./routes/admin";
 import { authRouter } from "./routes/auth";
 import { driversRouter } from "./routes/drivers";
+import { geocodingRouter } from "./routes/geocoding";
 import { healthRouter } from "./routes/health";
 import { ridesRouter } from "./routes/rides";
 
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/api", healthRouter);
   app.use("/api/auth", authRouter);
   app.use("/api/drivers", driversRouter);
+  app.use("/api/geocoding", geocodingRouter);
   app.use("/api/rides", ridesRouter);
   app.use("/api/admin", adminRouter);
 

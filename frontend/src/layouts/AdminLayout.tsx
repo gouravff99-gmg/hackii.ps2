@@ -6,6 +6,7 @@ const NAV: NavItem[] = [
   { to: "/admin/demand", label: "Demand intelligence", icon: "layers" },
   { to: "/admin/rides", label: "Ride management", icon: "route" },
   { to: "/admin/drivers", label: "Driver management", icon: "users" },
+  { to: "/admin/verification", label: "Driver verification", icon: "shield" },
   { to: "/admin/allocation", label: "Smart allocation", icon: "zap" },
   { to: "/admin/simulation", label: "Simulation", icon: "play" },
   { to: "/admin/evaluation", label: "Evaluation", icon: "activity" },

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { currentAuth } from "../middleware/auth";
 import { SOCKET_EVENTS } from "@ps02/shared";
 import * as driversService from "../services/drivers";
+import { getDriverDemandInsights } from "../services/zones";
 import { emitToAdmins } from "../services/realtime";
 import { ApiError } from "../utils/ApiError";
 
@@ -39,6 +40,10 @@ export async function nearby(req: Request, res: Response) {
 export async function me(req: Request, res: Response) {
   const driverId = driverIdOf(req);
   res.json({ driver: await driversService.getDriverProfile(driverId) });
+}
+
+export async function demand(req: Request, res: Response) {
+  res.json(await getDriverDemandInsights(driverIdOf(req)));
 }
 
 export async function setStatus(req: Request, res: Response) {

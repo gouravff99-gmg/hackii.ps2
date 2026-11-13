@@ -1,7 +1,9 @@
 import { DriverStatus, MATCHING, Strategy, type AllocationBreakdown, type LatLng } from "@ps02/shared";
 import { prisma } from "../lib/prisma";
+import { env } from "../config/env";
 import { haversineKm } from "./geo";
 import { idleMinutes, rankDrivers, rankNearestOnly, workloadOf, type RankCandidate } from "./matching";
+import { eligibleDriverWhere } from "./driverEligibility";
 
 /** Fallback road speed used when only a straight-line distance is available. */
 const PICKUP_SPEED_KMH = 24;
@@ -16,6 +18,40 @@ export interface AllocationResult {
   ranked: AllocationBreakdown[];
   chosen: AllocationBreakdown | null;
   strategy: Strategy;
+  retryable?: boolean;
+}
+
+export function buildDemoAllocation(
+  driver: {
+    id: string;
+    name: string;
+    lat: number;
+    lng: number;
+    busyMinutesToday: number;
+    completedToday: number;
+    acceptanceRate: number;
+    lastIdleSince: Date | string;
+  },
+  pickup: LatLng,
+  etaMin = env.demoPickupEtaMin,
+): AllocationResult {
+  const candidate: RankCandidate = {
+    driverId: driver.id,
+    driverName: driver.name,
+    distanceKm: haversineKm(pickup, { lat: driver.lat, lng: driver.lng }),
+    etaMin,
+    workload: workloadOf(driver),
+    acceptanceRate: driver.acceptanceRate,
+    idleMin: idleMinutes(driver.lastIdleSince),
+  };
+  const ranked = rankDrivers([candidate]);
+
+  return {
+    candidates: [candidate],
+    ranked,
+    chosen: ranked[0] ?? null,
+    strategy: Strategy.SMART,
+  };
 }
 
 /**
@@ -28,13 +64,19 @@ export async function allocateDriver(params: {
   excludeDriverIds?: string[];
   radiusKm?: number;
   now?: Date;
+  includeSimulated?: boolean;
 }): Promise<AllocationResult> {
   const radiusKm = params.radiusKm ?? MATCHING.candidateRadiusKm;
   const now = params.now ?? new Date();
   const excluded = new Set(params.excludeDriverIds ?? []);
 
   const drivers = await prisma.driver.findMany({
-    where: { status: DriverStatus.AVAILABLE },
+    where: {
+      AND: [
+        { status: DriverStatus.AVAILABLE },
+        eligibleDriverWhere({ now, includeSimulated: params.includeSimulated }),
+      ],
+    },
     include: { user: { select: { name: true } } },
   });
 
@@ -65,6 +107,55 @@ export async function allocateDriver(params: {
     chosen: ranked[0] ?? null,
     strategy: params.strategy,
   };
+}
+
+/**
+ * Demo dispatch targets one configured existing driver, independent of
+ * pickup distance. Availability is still required to prevent concurrent rides.
+ */
+export async function allocateDemoDriver(params: {
+  pickup: LatLng;
+  excludeDriverIds?: string[];
+}): Promise<AllocationResult> {
+  const excluded = new Set(params.excludeDriverIds ?? []);
+  const driver = await prisma.driver.findFirst({
+    where: {
+      user: { email: env.demoDriverEmail },
+    },
+    include: { user: { select: { name: true } } },
+  });
+
+  if (!driver || excluded.has(driver.id)) {
+    return {
+      candidates: [],
+      ranked: [],
+      chosen: null,
+      strategy: Strategy.SMART,
+    };
+  }
+  if (driver.status !== DriverStatus.AVAILABLE) {
+    return {
+      candidates: [],
+      ranked: [],
+      chosen: null,
+      strategy: Strategy.SMART,
+      retryable: driver.status === DriverStatus.BUSY,
+    };
+  }
+
+  return buildDemoAllocation(
+    {
+      id: driver.id,
+      name: driver.user.name,
+      lat: driver.lat,
+      lng: driver.lng,
+      busyMinutesToday: driver.busyMinutesToday,
+      completedToday: driver.completedToday,
+      acceptanceRate: driver.acceptanceRate,
+      lastIdleSince: driver.lastIdleSince,
+    },
+    params.pickup,
+  );
 }
 
 /** Re-derive the explanation for an already-persisted ranking. */

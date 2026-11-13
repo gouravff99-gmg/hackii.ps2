@@ -3,7 +3,7 @@ import { RideStatus } from "@ps02/shared";
 import type { Request, Response } from "express";
 import { z } from "zod";
 import { currentAuth } from "../middleware/auth";
-import { driverCancelRide, respondToOffer } from "../services/dispatch";
+import { driverCancelRide, getDriverOffer, respondToOffer } from "../services/dispatch";
 import * as ridesService from "../services/rides";
 import { ApiError } from "../utils/ApiError";
 import { viewerFrom } from "../utils/viewer";
@@ -55,6 +55,12 @@ export async function driverActive(req: Request, res: Response) {
   const auth = currentAuth(req);
   if (!auth.driverId) throw ApiError.forbidden("No driver profile on this account");
   res.json({ ride: await ridesService.getDriverActiveRide(auth.driverId) });
+}
+
+export async function driverOffer(req: Request, res: Response) {
+  const auth = currentAuth(req);
+  if (!auth.driverId) throw ApiError.forbidden("No driver profile on this account");
+  res.json({ offer: await getDriverOffer(auth.driverId) });
 }
 
 export async function driverHistory(req: Request, res: Response) {

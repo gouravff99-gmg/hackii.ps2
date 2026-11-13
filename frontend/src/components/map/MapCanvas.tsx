@@ -45,6 +45,14 @@ function Recenter({ target }: { target: LatLng }) {
   return null;
 }
 
+function SetViewport({ center, zoom }: { center: LatLng; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView([center.lat, center.lng], zoom);
+  }, [map, center.lat, center.lng, zoom]);
+  return null;
+}
+
 export interface MapCanvasProps {
   center: LatLng;
   zoom?: number;
@@ -83,6 +91,7 @@ export function MapCanvas({
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
+      <SetViewport center={center} zoom={zoom} />
       {onMapClick ? <ClickCapture onClick={onMapClick} /> : null}
       {recenter ? <Recenter target={recenter} /> : null}
 

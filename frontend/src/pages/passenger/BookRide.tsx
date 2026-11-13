@@ -1,339 +1,339 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  CITY,
-  type EstimateResponse,
-  type LatLng,
-  type NearbyDriver,
-} from "@ps02/shared";
-import { PageHeader } from "../../components/ui/PageHeader";
-import { Card, CardBody, CardHeader } from "../../components/ui/Card";
-import { Button } from "../../components/ui/Button";
+import { INDIA_BOUNDS, INDIA_CENTER, type EstimateResponse, type LatLng, type NearbyDriver } from "@ps02/shared";
 import { Badge } from "../../components/ui/Badge";
-import { Input } from "../../components/ui/Input";
-import { Spinner } from "../../components/ui/Spinner";
+import { Button } from "../../components/ui/Button";
+import { Card, CardBody, CardHeader } from "../../components/ui/Card";
 import { ErrorState } from "../../components/ui/EmptyState";
-import { MapCanvas, type MapMarker } from "../../components/map/MapCanvas";
-import { driverApi } from "../../services/driverApi";
-import { rideApi } from "../../services/rideApi";
-import { errorMessage } from "../../services/api";
+import { PageHeader } from "../../components/ui/PageHeader";
+import { Spinner } from "../../components/ui/Spinner";
+import { RideLocationPicker } from "../../components/map/RideLocationPicker";
+import { useAuth } from "../../hooks/useAuth";
+import { useRideLocations } from "../../hooks/useRideLocations";
 import { useToast } from "../../hooks/useToast";
+import { driverApi } from "../../services/driverApi";
+import { ApiClientError, errorMessage } from "../../services/api";
+import { rideApi } from "../../services/rideApi";
 import { formatCurrency, formatKm, formatMinutes } from "../../utils/format";
-import { Icon } from "../../components/ui/Icon";
 
-type ActiveField = "pickup" | "drop";
+type BookingState =
+  | "IDLE"
+  | "PICKUP_SELECTED"
+  | "DESTINATION_SELECTED"
+  | "CALCULATING_ROUTE"
+  | "ROUTE_READY"
+  | "BOOKING"
+  | "ERROR";
 
-function parseCoordinate(value: string): LatLng | null {
-  const [latRaw, lngRaw] = value.split(",");
-  const lat = Number(latRaw);
-  const lng = Number(lngRaw);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-  return { lat, lng };
+function isValidPoint(point: LatLng): boolean {
+  return (
+    Number.isFinite(point.lat) &&
+    Number.isFinite(point.lng) &&
+    point.lat >= INDIA_BOUNDS.south &&
+    point.lat <= INDIA_BOUNDS.north &&
+    point.lng >= INDIA_BOUNDS.west &&
+    point.lng <= INDIA_BOUNDS.east
+  );
+}
+
+function routeKey(pickup: LatLng, drop: LatLng): string {
+  return `${pickup.lat},${pickup.lng}|${drop.lat},${drop.lng}`;
+}
+
+function validEstimate(estimate: EstimateResponse): boolean {
+  return (
+    Number.isFinite(estimate.distanceKm) &&
+    estimate.distanceKm > 0 &&
+    Number.isFinite(estimate.etaMin) &&
+    estimate.etaMin > 0 &&
+    Number.isFinite(estimate.durationMin) &&
+    estimate.durationMin > 0 &&
+    Number.isFinite(estimate.fare) &&
+    estimate.fare >= 0 &&
+    Number.isFinite(estimate.surge) &&
+    estimate.surge >= 1
+  );
 }
 
 export function BookRide() {
   const navigate = useNavigate();
   const toast = useToast();
-
-  const [pickup, setPickup] = useState<LatLng | null>(null);
-  const [drop, setDrop] = useState<LatLng | null>(null);
-  const [activeField, setActiveField] = useState<ActiveField>("pickup");
-  const [pickupText, setPickupText] = useState("");
-  const [dropText, setDropText] = useState("");
-
+  const { user, logout } = useAuth();
+  const locations = useRideLocations();
   const [estimate, setEstimate] = useState<EstimateResponse | null>(null);
+  const [estimateKey, setEstimateKey] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [estimateError, setEstimateError] = useState<string | null>(null);
-
   const [nearby, setNearby] = useState<NearbyDriver[]>([]);
   const [booking, setBooking] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [bookingState, setBookingState] = useState<BookingState>("IDLE");
+  const [routeRetry, setRouteRetry] = useState(0);
+  const submitting = useRef(false);
+
+  const pickup = locations.pickup;
+  const drop = locations.drop;
+  const currentRouteKey = pickup && drop ? routeKey(pickup, drop) : null;
+  const routeReady =
+    Boolean(estimate && currentRouteKey && estimateKey === currentRouteKey) &&
+    !estimating &&
+    !estimateError;
+
+  useEffect(() => {
+    if (!pickup && !drop) {
+      setBookingState("IDLE");
+      return;
+    }
+    if (pickup && !drop) {
+      setBookingState("PICKUP_SELECTED");
+      return;
+    }
+    if (!pickup || !drop) {
+      setBookingState("DESTINATION_SELECTED");
+      return;
+    }
+
+    setBookingError(null);
+    setEstimate(null);
+    setEstimateKey(null);
+    setEstimateError(null);
+    setEstimating(false);
+
+    if (!isValidPoint(pickup) || !isValidPoint(drop)) {
+      setEstimateError("Choose pickup and destination within India.");
+      setBookingState("ERROR");
+      return;
+    }
+    if (pickup.lat === drop.lat && pickup.lng === drop.lng) {
+      setEstimateError("Pickup and destination must be different locations.");
+      setBookingState("ERROR");
+      return;
+    }
+
+    let active = true;
+    const key = routeKey(pickup, drop);
+    setBookingState("CALCULATING_ROUTE");
+    setEstimating(true);
+    rideApi
+      .estimate(pickup, drop)
+      .then((response) => {
+        if (!active) return;
+        if (!validEstimate(response)) {
+          throw new Error("The route service returned an invalid distance, duration or fare. Please retry.");
+        }
+        setEstimate(response);
+        setEstimateKey(key);
+        setBookingState("ROUTE_READY");
+      })
+      .catch((error: unknown) => {
+        if (!active) return;
+        setEstimate(null);
+        setEstimateKey(null);
+        setEstimateError(errorMessage(error));
+        setBookingState("ERROR");
+      })
+      .finally(() => {
+        if (active) setEstimating(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [pickup?.lat, pickup?.lng, drop?.lat, drop?.lng, routeRetry]);
 
   useEffect(() => {
     if (!pickup) {
       setNearby([]);
       return;
     }
-    let alive = true;
+    let active = true;
     driverApi
       .nearby(pickup.lat, pickup.lng, 8)
       .then((response) => {
-        if (alive) setNearby(response.drivers);
+        if (active) setNearby(response.drivers);
       })
       .catch(() => {
-        if (alive) setNearby([]);
+        if (active) setNearby([]);
       });
     return () => {
-      alive = false;
+      active = false;
     };
-  }, [pickup]);
-
-  useEffect(() => {
-    if (!pickup || !drop) {
-      setEstimate(null);
-      return;
-    }
-
-    let alive = true;
-    setEstimating(true);
-    setEstimateError(null);
-
-    rideApi
-      .estimate(pickup, drop)
-      .then((response) => {
-        if (alive) setEstimate(response);
-      })
-      .catch((err) => {
-        if (alive) {
-          setEstimate(null);
-          setEstimateError(errorMessage(err));
-        }
-      })
-      .finally(() => {
-        if (alive) setEstimating(false);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [pickup, drop]);
-
-  const handleMapClick = (point: LatLng) => {
-    if (activeField === "pickup") {
-      setPickup(point);
-      setPickupText(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
-      if (!drop) setActiveField("drop");
-    } else {
-      setDrop(point);
-      setDropText(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
-    }
-  };
-
-  const useCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      toast.push("warning", "Location unavailable", "This browser does not expose geolocation.");
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const point = { lat: position.coords.latitude, lng: position.coords.longitude };
-        setPickup(point);
-        setPickupText(`${point.lat.toFixed(4)}, ${point.lng.toFixed(4)}`);
-        setActiveField("drop");
-      },
-      () => {
-        toast.push(
-          "warning",
-          "Could not read your location",
-          "Pick your pickup point on the map instead.",
-        );
-      },
-      { enableHighAccuracy: true, timeout: 8000 },
-    );
-  };
+  }, [pickup?.lat, pickup?.lng]);
 
   const book = async () => {
-    if (!pickup || !drop) return;
+    if (submitting.current) return;
+    if (!user) {
+      setBookingError("Your session has expired. Sign in again to book a ride.");
+      return;
+    }
+    if (!pickup || !drop || !isValidPoint(pickup) || !isValidPoint(drop)) {
+      setBookingError("Choose valid pickup and destination coordinates before booking.");
+      return;
+    }
+    if (pickup.lat === drop.lat && pickup.lng === drop.lng) {
+      setBookingError("Pickup and destination must be different locations.");
+      return;
+    }
+    if (!routeReady || !estimate || !validEstimate(estimate)) {
+      setBookingError("The route and fare are not ready yet. Retry the route calculation.");
+      return;
+    }
+
+    submitting.current = true;
     setBooking(true);
     setBookingError(null);
+    setBookingState("BOOKING");
     try {
-      const response = await rideApi.create(pickup, drop);
-      toast.push("success", "Ride requested", "We are matching you with a driver now.");
-      navigate("/passenger/rides", { state: { rideId: response.ride.id } });
-    } catch (err) {
-      setBookingError(errorMessage(err));
+      const { ride } = await rideApi.create(pickup, drop);
+      if (!ride.id) throw new Error("The server did not confirm the ride request.");
+      toast.push("success", "Ride request confirmed", "Your ride is saved. Searching for an available driver.");
+      navigate("/passenger/rides", { state: { rideId: ride.id } });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        logout();
+        navigate("/login", { state: { from: "/passenger/book" } });
+        return;
+      }
+      setBookingError(errorMessage(error));
+      setBookingState("ERROR");
     } finally {
+      submitting.current = false;
       setBooking(false);
     }
   };
 
-  const markers: MapMarker[] = useMemo(() => {
-    const list: MapMarker[] = nearby.map((driver) => ({
-      id: driver.id,
-      lat: driver.lat,
-      lng: driver.lng,
-      kind: "driver",
-      label: `${driver.name} · ${formatMinutes(driver.etaMin)}`,
-    }));
-    if (pickup) list.push({ id: "pickup", lat: pickup.lat, lng: pickup.lng, kind: "pickup", label: "Pickup" });
-    if (drop) list.push({ id: "drop", lat: drop.lat, lng: drop.lng, kind: "drop", label: "Destination" });
-    return list;
-  }, [nearby, pickup, drop]);
+  const pickupLabel =
+    locations.pickupAddress ||
+    (pickup ? `${pickup.lat.toFixed(5)}, ${pickup.lng.toFixed(5)}` : "Pickup not selected");
+  const dropLabel =
+    locations.dropAddress ||
+    (drop ? `${drop.lat.toFixed(5)}, ${drop.lng.toFixed(5)}` : "Destination not selected");
+  const bookingPanel = (
+    <Card
+      className={`shadow-card ${
+        routeReady ? "motion-safe:animate-slide-up" : ""
+      }`}
+    >
+      <CardHeader
+        title="Your ride"
+        subtitle="The booking button becomes available as soon as the route and fare are ready."
+      />
+      <CardBody className="flex flex-col gap-4">
+        {routeReady && estimate ? (
+          <>
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div className="min-w-0">
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Pickup</dt>
+                <dd className="mt-1 break-words font-medium text-ink-900">{pickupLabel}</dd>
+              </div>
+              <div className="min-w-0">
+                <dt className="text-xs uppercase tracking-wide text-ink-400">Destination</dt>
+                <dd className="mt-1 break-words font-medium text-ink-900">{dropLabel}</dd>
+              </div>
+            </dl>
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-ink-50 p-4">
+              <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+                <div>
+                  <p className="text-xs text-ink-500">Distance</p>
+                  <p className="font-semibold text-ink-900">{formatKm(estimate.distanceKm)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500">Travel time</p>
+                  <p className="font-semibold text-ink-900">{formatMinutes(estimate.etaMin)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-ink-500">Estimated fare</p>
+                  <p
+                    key={estimate.fare}
+                    className="font-semibold text-ink-900 motion-safe:animate-fade-in motion-reduce:transition-none"
+                  >
+                    {formatCurrency(estimate.fare, 0)}
+                  </p>
+                </div>
+              </div>
+              <Badge tone={estimate.surge > 1.05 ? "warning" : "success"}>
+                {estimate.surge > 1.05 ? `Surge ×${estimate.surge.toFixed(2)}` : "No surge"}
+              </Badge>
+            </div>
+            <p className="text-xs text-ink-500">
+              Route source: {estimate.source === "osrm" ? "OSRM road network" : "Haversine fallback"}.
+            </p>
+            {bookingError ? (
+              <p role="alert" className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">
+                {bookingError}
+              </p>
+            ) : null}
+          </>
+        ) : estimating ? (
+          <div className="flex items-center justify-center gap-2 py-5 text-sm text-ink-500" aria-live="polite">
+            <Spinner className="h-5 w-5 text-brand-500" />
+            Calculating route and fare…
+          </div>
+        ) : estimateError ? (
+          <div className="flex flex-col gap-3">
+            <ErrorState message={estimateError} />
+            {pickup && drop && isValidPoint(pickup) && isValidPoint(drop) ? (
+              <Button
+                variant="secondary"
+                fullWidth
+                onClick={() => setRouteRetry((attempt) => attempt + 1)}
+              >
+                Retry route calculation
+              </Button>
+            ) : null}
+          </div>
+        ) : (
+          <p className="py-2 text-sm text-ink-500" aria-live="polite">
+            {bookingState === "PICKUP_SELECTED"
+              ? "Pickup selected. Choose a destination anywhere in India to calculate your route and fare."
+              : bookingState === "DESTINATION_SELECTED"
+                ? "Choose a pickup location anywhere in India to calculate your route and fare."
+                : "Select pickup and destination locations to see your ride details."}
+          </p>
+        )}
+      </CardBody>
+    </Card>
+  );
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className={`flex flex-col gap-5 ${routeReady ? "pb-24 lg:pb-0" : ""}`}>
       <PageHeader
         title="Book a ride"
-        description="Set a pickup and destination on the map. You will see the fare and ETA before confirming."
+        description="Choose pickup and destination. Your route, duration and fare will be calculated automatically."
+      />
+      <RideLocationPicker
+        locations={locations}
+        nearby={nearby}
+        route={routeReady ? estimate?.polyline : undefined}
+        onReset={() => {
+          setEstimate(null);
+          setEstimateKey(null);
+          setEstimateError(null);
+          setBookingError(null);
+        }}
+        bookingPanel={bookingPanel}
       />
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card className="overflow-hidden">
-          <CardHeader
-            title={`Tap the map to set ${activeField === "pickup" ? "pickup" : "destination"}`}
-            subtitle={`${CITY.name} service area`}
-            action={
-              <div className="flex gap-1 rounded-lg bg-ink-100 p-1">
-                <button
-                  type="button"
-                  onClick={() => setActiveField("pickup")}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    activeField === "pickup" ? "bg-white text-ink-900 shadow-sm" : "text-ink-500"
-                  }`}
-                >
-                  Pickup
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveField("drop")}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition ${
-                    activeField === "drop" ? "bg-white text-ink-900 shadow-sm" : "text-ink-500"
-                  }`}
-                >
-                  Destination
-                </button>
-              </div>
-            }
-          />
-          <div className="h-[380px] sm:h-[480px]">
-            <MapCanvas
-              center={pickup ?? CITY.center}
-              zoom={pickup ? 13 : 12}
-              markers={markers}
-              route={estimate?.polyline ?? []}
-              onMapClick={handleMapClick}
-            />
+      {routeReady ? (
+        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-ink-200 bg-white/95 p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-raised backdrop-blur lg:inset-x-auto lg:bottom-6 lg:right-6 lg:w-[420px] lg:rounded-2xl lg:border">
+          <div className="mx-auto flex max-w-3xl items-center gap-3 lg:max-w-none">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-ink-500">Estimated fare · {formatKm(estimate!.distanceKm)} · {formatMinutes(estimate!.etaMin)}</p>
+              <p className="text-lg font-semibold text-ink-900">{formatCurrency(estimate!.fare, 0)}</p>
+            </div>
+            <Button
+              size="lg"
+              loading={booking}
+              disabled={!routeReady || booking}
+              className="min-h-12 shrink-0 transition-all hover:-translate-y-0.5 hover:shadow-raised motion-reduce:transform-none motion-reduce:transition-none"
+              onClick={() => void book()}
+            >
+              {booking ? "Booking…" : "Confirm & Book Ride"}
+            </Button>
           </div>
-        </Card>
-
-        <div className="flex flex-col gap-5">
-          <Card>
-            <CardHeader title="Trip details" subtitle="Coordinates update as you tap the map" />
-            <CardBody className="flex flex-col gap-4">
-              <div>
-                <Input
-                  label="Pickup"
-                  value={pickupText}
-                  onChange={(event) => {
-                    setPickupText(event.target.value);
-                    const parsed = parseCoordinate(event.target.value);
-                    if (parsed) setPickup(parsed);
-                  }}
-                  placeholder="12.9716, 77.5946"
-                  hint="Format: latitude, longitude"
-                />
-                <button
-                  type="button"
-                  onClick={useCurrentLocation}
-                  className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
-                >
-                  <Icon name="navigation" size={13} />
-                  Use my current location
-                </button>
-              </div>
-
-              <Input
-                label="Destination"
-                value={dropText}
-                onChange={(event) => {
-                  setDropText(event.target.value);
-                  const parsed = parseCoordinate(event.target.value);
-                  if (parsed) setDrop(parsed);
-                }}
-                placeholder="12.9352, 77.6245"
-                hint="Format: latitude, longitude"
-              />
-
-              <div className="flex gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setPickup(CITY.center);
-                    setPickupText(`${CITY.center.lat.toFixed(4)}, ${CITY.center.lng.toFixed(4)}`);
-                  }}
-                >
-                  Centre pickup
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setPickup(null);
-                    setDrop(null);
-                    setPickupText("");
-                    setDropText("");
-                    setEstimate(null);
-                    setEstimateError(null);
-                    setActiveField("pickup");
-                  }}
-                >
-                  Reset
-                </Button>
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardHeader title="Fare estimate" subtitle="Before you confirm" />
-            <CardBody>
-              {estimating ? (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-ink-500">
-                  <Spinner className="h-5 w-5 text-brand-500" /> Calculating route…
-                </div>
-              ) : estimateError ? (
-                <ErrorState message={estimateError} />
-              ) : estimate ? (
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-end justify-between">
-                    <div>
-                      <p className="text-xs uppercase tracking-wide text-ink-400">Estimated fare</p>
-                      <p className="mt-1 text-2xl font-semibold text-ink-900">
-                        {formatCurrency(estimate.fare, 0)}
-                      </p>
-                    </div>
-                    {estimate.surge > 1.05 ? (
-                      <Badge tone="warning">Surge ×{estimate.surge.toFixed(2)}</Badge>
-                    ) : (
-                      <Badge tone="success">No surge</Badge>
-                    )}
-                  </div>
-                  <dl className="grid grid-cols-3 gap-3 border-t border-ink-100 pt-3 text-sm">
-                    <div>
-                      <dt className="text-xs text-ink-400">Distance</dt>
-                      <dd className="mt-0.5 font-medium text-ink-900">{formatKm(estimate.distanceKm)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-ink-400">Duration</dt>
-                      <dd className="mt-0.5 font-medium text-ink-900">{formatMinutes(estimate.etaMin)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs text-ink-400">Drivers</dt>
-                      <dd className="mt-0.5 font-medium text-ink-900">{nearby.length}</dd>
-                    </div>
-                  </dl>
-                  <p className="text-xs text-ink-400">
-                    Route source: {estimate.source === "osrm" ? "OSRM road network" : "straight-line fallback"}.
-                  </p>
-
-                  {bookingError ? (
-                    <p className="rounded-xl bg-red-50 px-3 py-2.5 text-sm text-red-700">{bookingError}</p>
-                  ) : null}
-
-                  <Button size="lg" fullWidth loading={booking} onClick={() => void book()}>
-                    Confirm and book
-                  </Button>
-                </div>
-              ) : (
-                <p className="py-6 text-center text-sm text-ink-500">
-                  Set both points to see distance, ETA and fare.
-                </p>
-              )}
-            </CardBody>
-          </Card>
+          {bookingError ? <p role="alert" className="mx-auto mt-2 max-w-3xl text-sm text-red-700">{bookingError}</p> : null}
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }
