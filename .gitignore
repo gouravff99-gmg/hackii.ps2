@@ -20,5 +20,10 @@ ml/data/
 ml/.cache/
 
 # prisma / local db
+<<<<<<< HEAD
 backend/prisma/*.db
 backend/prisma/*.db-journal
+=======
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+>>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a

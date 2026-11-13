@@ -53,6 +53,7 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
 
 ## ML (Phase 4)
 
+<<<<<<< HEAD
 17. **Python writes to PostgreSQL directly.** `ml/generate_data.py` and `ml/train.py` use
     `psycopg2` with the same root `DATABASE_URL` (Prisma's `?schema=` parameter is stripped).
     They only touch `DemandHistory` / `DemandForecast`, and `generate_data.py` refuses to
@@ -69,6 +70,16 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
     only.
 20. **No GraphQL / message queues / microservices.** One Express process + one Socket.IO
     server + PostgreSQL.
+=======
+17. **Python data hand-off via JSON:** `ml/` writes history + 24 h forecasts to JSON files,
+    and `backend/prisma/seed.ts` (or a dedicated import script) loads them into `DemandHistory` /
+    `DemandForecast`. This avoids a DB driver dependency in Python and keeps a single
+    Prisma write path.
+18. **Python runtime:** the dev machine has Python 3.14. `requirements.txt` intentionally
+    uses lower bounds so pip can pick wheels available for the installed interpreter. If
+    a scientific wheel is unavailable, use a Python 3.11/3.12 virtualenv (documented in
+    Phase 4).
+>>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
 
 ## Added in the cleanup pass
 
@@ -77,6 +88,7 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
     dotless domains such as `admin@demo`, which would have broken login validation.
 23. **Simulator speed / fleet size are not in `.env`.** `shared/src/config.ts` is the only place.
 
+<<<<<<< HEAD
 ## Implemented behaviour (details the spec leaves open)
 
 24. **Workload blend.** `workload = busyMinutesToday + completedToday × 10`
@@ -105,3 +117,12 @@ Decisions taken where the spec leaves room. Each is the simplest reasonable choi
     evaluation baseline.
 34. **Tests.** Pure services (fare, surge, matching, pooling, ride state machine, evaluation) are
     unit-tested with vitest. The health test intentionally tolerates an unreachable database.
+=======
+## Scope notes
+
+19. **Out of scope:** payment processing, real phone/OTP auth, production deployment
+    manifests, multi-city support, admin user management, chat. Auth is JWT + email/password
+    only.
+20. **No GraphQL / message queues / microservices.** One Express process + one Socket.IO
+    server + PostgreSQL.
+>>>>>>> 2c9d961896379c7a559888f959bc1f6d16bab32a
